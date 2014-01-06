@@ -1,0 +1,49 @@
+A	- Enable ADC (must already be powered) - this enables the PD pin on the ADC
+a	- Disable ADC (but keep power on) - disables PD pin on ADC - This can also be asserted by a powerdown request
+B	- Toggle blue LED
+C
+c
+D	- Enable dual edge sampling (DES) on ADC
+d	- Disable DES 
+E	- Turn on received character echo
+e 	- Turn off received character echo
+F
+f
+G	- Toggle green LED
+H
+h
+I	- Initialize ADC register values - ADC must be powered
+J
+j
+K
+k
+L
+l
+M
+m
+N
+n
+O	- ADC power on - this enables the 1.9V supply
+o	- ADC power off - disables the 1.9V supply
+P	- Peripheral power on - enables the 3.3V and 2.5V supplies for the ADC peripherals
+	  This can only be asserted of the ADC power is also on
+p	- Disables peripheral power
+Q	- Enable Q input on ADC (must already be powered) - enables the PDQ pin 
+q	- Disable Q input on ADC (must already be powered) - Unknow behavior if in DES mode
+R 	- Toggle red LED
+S
+s
+T	- Enable the data trigger
+t	- Disable the data trigger
+U
+u
+V
+v
+W
+w
+X
+x
+Y
+y
+Z
+z
