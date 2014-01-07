@@ -44,6 +44,7 @@ module ADCExtendedControl(
 	wire EnAddrCount, EnBitCount, EnSClkCounter;
 	wire ClrBitC, ClrSclkC, ClrAddrC;
 	wire [4:0] BitNumber;
+	wire done;
 
 	reg [3:0] InitAddrValue = 4'b0000;
 
@@ -158,5 +159,6 @@ module ADCExtendedControl(
 	assign sdata = ROMData[BitNumber];
 	assign select = (CurrentState == IDLE); //select is inverted signal
 	assign EnSClkCounter = (CurrentState != IDLE);
+	assign done = (CurrentState == DONE);
 	
 endmodule
