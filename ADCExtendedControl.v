@@ -32,7 +32,8 @@ module ADCExtendedControl(
 	
 	output sclk,
 	output sdata,
-	output select
+	output select,
+	output done			//Done strobes high for 1 clock cycle when finished
     );
 	
 	wire [31:0] ROMData;
@@ -81,13 +82,14 @@ module ADCExtendedControl(
 	);
 		
 	//The state machine
-	localparam IDLE = 		3'b000,
-				  LOADINIT = 	3'b101, 
-				  LOADDESEN = 	3'b110,
-				  LOADDESDIS = 3'b111,
-				  INITIAL = 	3'b001,
-				  ENABLE_DES = 3'b010,
-				  DISABLE_DES= 3'b011;
+	localparam IDLE = 		3'b000, // 0
+				  LOADINIT = 	3'b101, // 5 
+				  LOADDESEN = 	3'b110, // 6
+				  LOADDESDIS = 3'b111, // 7
+				  INITIAL = 	3'b001, // 1
+				  ENABLE_DES = 3'b010, // 2
+				  DISABLE_DES= 3'b011, // 3
+				  DONE = 		3'b100; // 4
 
 	reg [2:0] CurrentState = IDLE;
 	reg [2:0] NextState = IDLE;
@@ -119,20 +121,21 @@ module ADCExtendedControl(
 			end
 			INITIAL:begin
 				if(ROMAddress == 4'd8)
-					NextState = IDLE;
+					NextState = DONE;
 			end
 			ENABLE_DES:begin
 				if(ROMAddress == 4'd9)
-					NextState = IDLE;
+					NextState = DONE;
 			end
 			DISABLE_DES: begin
 				if(ROMAddress == 4'd6)
-					NextState = IDLE;
+					NextState = DONE;
 			end
+			DONE: NextState = IDLE;
 		endcase	
 	end
 	
-//logic
+	//logic
 	//Initalize counters and memory address for ROM
 	assign ClrBitCount = (CurrentState[2] == 1);
 	assign ClrClkCount = (CurrentState[2] == 1);	
