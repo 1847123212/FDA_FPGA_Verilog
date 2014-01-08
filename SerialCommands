@@ -1,9 +1,9 @@
-A	- Enable ADC (must already be powered) - this enables the PD pin on the ADC
-a	- Disable ADC (but keep power on) - disables PD pin on ADC - This can also be asserted by a powerdown request
+A	- 
+a	- 
 B	- Toggle blue LED
 C	- Run ADC calibration
-D	- Enable dual edge sampling (DES) on ADC
-d	- Disable DES 
+D	- **NOT IMPLEMMENTED**Enable dual edge sampling (DES) on ADC
+d	- **NOT IMPLEMMENTED**Disable DES 
 E	- Turn on received character echo
 e 	- Turn off received character echo
 F
@@ -11,12 +11,12 @@ f
 G	- Toggle green LED
 H
 h
-I	- Initialize ADC register values - ADC must be powered
+I	- 
 J
 j
 K
 k
-L
+L	- 
 l
 M
 m
@@ -26,8 +26,8 @@ O	- ADC power on - this enables the 1.9V supply and then the 3.3V and 2.5V suppl
 o	- ADC power off - disables the 1.9V supply after the 3.3V and 2.5V supplies
 P
 p
-Q	- Enable Q input on ADC (must already be powered) - enables the PDQ pin 
-q	- Disable Q input on ADC (must already be powered) - Unknow behavior if in DES mode
+Q	- **NOT IMPLEMMENTED**Enable Q input on ADC (must already be powered) - enables the PDQ pin 
+q	- **NOT IMPLEMMENTED**Disable Q input on ADC (must already be powered) - Unknow behavior if in DES mode
 R 	- Toggle red LED
 S	- Put ADC in low power (sleep) idle.
 s
@@ -39,7 +39,7 @@ V
 v
 W	- Wake up ADC from low power idle
 w
-X
+X	- Record and transmit data
 x
 Y
 y

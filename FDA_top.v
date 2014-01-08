@@ -20,12 +20,12 @@
 //////////////////////////////////////////////////////////////////////////////////
 module FDA_top(
 	//ADC control and status
-	input ADC_CAL,
-	input ADC_PD,
-	input ADC_SDATA,
-	input ADC_SCLK,
-	input ADC_SCS,
-	input ADC_PDQ,
+	output ADC_CAL,
+	output ADC_PD,
+	output ADC_SDATA,
+	output ADC_SCLK,
+	output ADC_SCS,
+	output ADC_PDQ,
 	
 	input ADC_CALRUN,
 	
@@ -162,16 +162,113 @@ RGBFSM RGBControl(
 //when this wire is low.
 //This wire is only high when the ADC has been powered and PWR_INT
 //is high
-wire OutToADCEnable; 
+wire OutToADCEnable, ADCSleep, ADCWake; 
 assign OutToADCEnable = (PWR_INT == 1 && ADC_PWR_EN == 1);
 
-ADC_FSM ADC_fsm (
+ADC_FSM ADC_controller (
     .Clock(clk), 
     .Reset(1'b0), 
     .Cmd(DataRxD), 
     .OutToADCEnable(OutToADCEnable), 
+    .Sleep(ADCSleep), 
+    .WakeUp(ADCWake), 
     .ADCPower(ADC_PWR_EN), 
-    .AnalogPower(ANALOG_PWR_EN)
+    .AnalogPower(ANALOG_PWR_EN), 
+    .OutSclk(ADC_SCLK), 
+    .OutSdata(ADC_SDATA), 
+    .OutSelect(ADC_SCS), 
+    .OutPD(ADC_PD), 
+    .OutPDQ(ADC_PDQ), 
+    .OutCal(ADC_CAL), 
+    .InCalRunning(ADC_CALRUN)
     );
+
+//------------------------------------------------------------------------------
+// ADC Data Clock
+//------------------------------------------------------------------------------
+wire ClkADC2DCM, ADCClock, ADCClockDelayed, ADCClockLocked;
+// Create the ADC input clock buffer and send the signal to the DCM
+IBUFGDS #(
+      .DIFF_TERM("TRUE"), 		// Differential Termination
+      .IOSTANDARD("LVDS_33") 	// Specifies the I/O standard for this buffer
+   ) IBUFGDS_adcClock (
+      .O(ClkADC2DCM),  			// Clock buffer output
+      .I(ADC_CLK_P),  			// Diff_p clock buffer input
+      .IB(ADC_CLK_N) 			// Diff_n clock buffer input
+   );
+	
+ADC_Clk_Manager ADC_Clock
+   (// Clock in ports
+    .CLK_IN1(ClkADC2DCM),      // IN
+    // Clock out ports
+    .CLK_OUT1(ADCClock),     // OUT
+    .CLK_OUT2(ADCClockDelayed),     // OUT
+    // Status and control signals
+    .RESET(1'b0),// IN
+    .LOCKED(ADCClockLocked));      // OUT
+
+//------------------------------------------------------------------------------
+// ADC Data Input 
+//------------------------------------------------------------------------------
+wire [31:0] ADCRegDataOut;		//DQD, DQ, DID, DI
+ADCDataInput ADC_Data_Capture (
+    .DataInP(ADC_DATA_P), 
+    .DataInN(ADC_DATA_N), 
+    .ClockIn(ADCClock), 
+    .ClockInDelayed(ADCClockDelayed), 
+    .DataOut(ADCRegDataOut)
+    );
+
+//------------------------------------------------------------------------------
+// Data FIFOs 
+//------------------------------------------------------------------------------
+wire FifoRst = 1'b0;
+wire FifoReadEn, FifoWriteEn;
+wire SideFull, TopFull, BottomFull; 
+wire SideEmpty, TopEmpty, BottomEmpty;
+wire SideValid, TopValid, BottomValid;
+wire [31:0] FifoDataOut;	//This data is in chronological order: [31:25] is DQD (oldest), 
+									// [24:16] is DID, [8:15] is DQ, [7:0] is DI 
+
+FIFO_11bit FIFO_Side_Inputs (
+  .rst(FifoRst), // input rst
+  .wr_clk(ADCClock), // input wr_clk
+  .rd_clk(clk), // input rd_clk
+  .din({ADCRegDataOut[31:26], ADCRegDataOut[15:11]}), // input [10 : 0] din
+  .wr_en(FifoWriteEn), // input wr_en
+  .rd_en(FifoReadEn), // input rd_en
+  .dout({FifoDataOut[7:2], FifoDataOut[15:11]}), // output [10 : 0] dout
+  .full(SideFull), // output full
+  .empty(SideEmpty), // output empty
+  .valid(SideValid) // output valid
+);
+
+FIFO_11bit FIFO_Bottom_Inputs (
+  .rst(FifoRst), // input rst
+  .wr_clk(ADCClockDelayed), // input wr_clk
+  .rd_clk(clk), // input rd_clk
+  .din(ADCRegDataOut[10:0]), // input [10 : 0] din
+  .wr_en(FifoWriteEn), // input wr_en
+  .rd_en(FifoReadEn), // input rd_en
+  .dout({FifoDataOut[10:8], FifoDataOut [31:24]}), // output [10 : 0] dout
+  .full(BottomFull), // output full
+  .empty(BottomEmpty), // output empty
+  .valid(BottomValid) // output valid
+);
+
+FIFO_10bit FIFO_Top_Inputs (
+  .rst(FifoRst), // input rst
+  .wr_clk(ADCClockDelayed), // input wr_clk
+  .rd_clk(clk), // input rd_clk
+  .din(ADCRegDataOut[25:16]), // input [9 : 0] din
+  .wr_en(FifoWriteEn), // input wr_en
+  .rd_en(FifoReadEn), // input rd_en
+  .dout({FifoDataOut[1:0], FifoDataOut[23:16]}), // output [9 : 0] dout
+  .full(TopFull), // output full
+  .empty(TopEmpty), // output empty
+  .valid(TopValid) // output valid
+);
+
+
 
 endmodule
