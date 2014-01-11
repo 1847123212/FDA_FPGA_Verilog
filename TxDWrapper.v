@@ -22,83 +22,34 @@ module TxDWrapper(
 	input Clock,
 	input Reset,
 	input [15:0] Data,
-	input [1:0] RequestToSend,
-	output [1:0] DataReceivedOut,
+	input [1:0] LatchData,
+	output [1:0] Busy,
 	output SDO
-    );
+   );
 
-localparam 	STATE_Idle = 				2'b00,
-				STATE_Wait = 2'b01,
-				STATE_TxDStart = 2'b010;
+//No more than one external device at a time is told that Transmitter is not busy
+reg [3:0] BusyReg = 4'b1011;
+wire TxDBusy;
 
-reg [1:0] CurrentState = STATE_Idle;
-reg [1:0] NextState = STATE_Idle;
-reg [7:0] TxDBuffer = 8'b0;
-reg [7:0] NewTxDValue = 8'b0;
-reg [1:0] DataReceived = 2'b0;
-reg [1:0] DRNext = 2'b0;
+assign Busy[1] = BusyReg[2] | TxDBusy;
+assign Busy[0] = BusyReg[0] | TxDBusy;
 
-assign DataReceivedOut = DataReceived;
-
-//--------------------------------------------
-//Synchronous State Transition
-//--------------------------------------------
 always@(posedge Clock) begin
-	if(Reset) begin
-		CurrentState <= STATE_Idle;
-		TxDBuffer <= 8'b0;
-		DataReceived <= 2'b0;
-		end 
-	else begin
-		CurrentState <= NextState;
-		TxDBuffer <= NewTxDValue;
-		DataReceived <= DRNext;
-	end
+	BusyReg[0] <= BusyReg [3];
+	BusyReg[3:1] <= BusyReg [2:0];
 end
 
-//------------------------------------------
-//Conditional State Transition
-//------------------------------------------
-always@(*) begin
-	NextState = CurrentState;
-	NewTxDValue = TxDBuffer;
-	DRNext = DataReceived;
-	case (CurrentState)
-		STATE_Idle: begin
-			if(RequestToSend[1]) 
-				begin
-					NewTxDValue = Data[15:8];
-					NextState = TxDBusy ? STATE_Wait : STATE_TxDStart;
-					DRNext = 2'b10;
-				end
-			else if (RequestToSend[0]) 
-				begin
-					NewTxDValue = Data[7:0];
-					NextState = TxDBusy ? STATE_Wait : STATE_TxDStart;
-					DRNext = 2'b01;
-				end
-		end
-		STATE_Wait: begin
-			DRNext = 2'b00;
-			if(!TxDBusy) NextState = STATE_TxDStart;
-		end
-		STATE_TxDStart: begin
-			DRNext = 2'b00;
-			NextState = STATE_Idle;
-		end
-	endcase
-end
+wire [7:0] TxData; 
 
-assign TxDStart = (CurrentState == STATE_TxDStart);
+assign TxData = (BusyReg[3] == 0 | BusyReg[2] == 0) ? Data[15:8] : Data[7:0]; 
+assign TxDStart = (BusyReg[3] == 0 | BusyReg[2] == 0) ? LatchData[1] : LatchData[0];
 
 async_transmitter txd (
     .clk(Clock), 
     .TxD_start(TxDStart), 
-    .TxD_data(TxDBuffer), 
+    .TxD_data(TxData), 
     .TxD(SDO), 
     .TxD_busy(TxDBusy)
     );
-
-
 endmodule
 

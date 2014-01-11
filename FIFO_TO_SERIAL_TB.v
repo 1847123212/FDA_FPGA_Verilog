@@ -22,31 +22,37 @@
 // 
 ////////////////////////////////////////////////////////////////////////////////
 
-module FIFO_TB;
+module FIFO_TO_SERIAL_TB;
 
 	// Inputs
 	reg [7:0] DQ;
 	reg [7:0] DQD;
 	reg [7:0] DI;
 	reg [7:0] DID;
+
 	wire [31:0] DataIn;
 	wire WriteEnable;
-	reg ReadEnable;
+	wire ReadEnable;
+	reg DataBottom;
+	
 	reg WriteClock;
 	reg WriteClockDelayed;
 	reg ReadClock;
 	reg Reset;
 
 	// Outputs
-	wire [7:0] DataOut;
 	wire DataValid;
 	wire FifoNotFull;
 	wire DataReadyToSend;
+	wire [1:0] Busy;
+	wire SDO;
+	wire [15:0] Data;
 
+	assign ReadEnable = ~Busy[1] & DataReadyToSend;
 	// Instantiate the Unit Under Test (UUT)
-	DataStorage uut (
+	DataStorage uut1 (
 		.DataIn(DataIn), 
-		.DataOut(DataOut), 
+		.DataOut(Data[15:8]), 
 		.WriteEnable(FifoNotFull), 
 		.ReadEnable(ReadEnable), 
 		.WriteClock(WriteClock), 
@@ -58,13 +64,23 @@ module FIFO_TB;
 		.DataReadyToSend(DataReadyToSend)
 	);
 
+	TxDWrapper uut2 (
+		.Clock(ReadClock), 
+		.Reset(Reset), 
+		.Data(Data), 
+		.LatchData({DataValid, 1'b0}), 
+		.Busy(Busy), 
+		.SDO(SDO)
+	);
+	
+	assign Data[7:0] = DataBottom;
 	assign DataIn = {DI, DID, DQ, DQD};
 	assign WriteEnable = 1;
+	assign ReadEnable = ~Busy[1];
 	
 	initial begin
 		// Initialize Inputs
 //		WriteEnable = 0;
-		ReadEnable = 1;
 		WriteClock = 0;
 		WriteClockDelayed = 0;
 		ReadClock = 0;
@@ -73,7 +89,8 @@ module FIFO_TB;
 		DI = 8'd3;
 		DQD = 8'd0;
 		DID = 8'd1;
-
+		DataBottom = 8'b10101010;
+		
 		// Wait 100 ns for global reset to finish
 		#100;
 		#500;	//FIFOS take a while 
@@ -87,10 +104,6 @@ module FIFO_TB;
 	
 	always
 		#5 ReadClock = ~ReadClock;
-
-	always@(posedge ReadClock) begin
-		ReadEnable = ~ReadEnable;
-	end 
 
 	always@(posedge WriteClock) begin
 		DQ = DQ + 4;

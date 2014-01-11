@@ -56,8 +56,8 @@ module ADC_FSM(
 					PERIPH_PWR_SHUTDOWN = 4'd13;
 
 `ifdef XILINX_ISIM				
-	reg [3:0] CurrentState = DES_SAMPLING;
-	reg [3:0] NextState = DES_SAMPLING;
+	reg [3:0] CurrentState = INIT_ADC_WARMUP;
+	reg [3:0] NextState = INIT_ADC_WARMUP;
 `else
 	reg [3:0] CurrentState = ALL_PWR_OFF;
 	reg [3:0] NextState = ALL_PWR_OFF;
@@ -67,17 +67,18 @@ module ADC_FSM(
 	wire [23:0] TimerOut;
 	
 	wire StartInit, StartDESEnable, StartDESDisable, RegWriteDone;
-	wire OutSclk, OutSdata, OutSelect, Sclk, Sdata, Select; 
+	wire Sclk, Sdata, Select; 
 	
 	//Prevent voltage on pins when ADC is not powered or is powering down
 	assign OutSclk = (OutToADCEnable) ? Sclk : 1'bz;
 	assign OutSdata = (OutToADCEnable) ? Sdata : 1'bz;
 	assign OutSelect = (OutToADCEnable) ? Select : 1'bz;
-	assign OutPD = (OutToADCEnable) ?   (CurrentState == LOW_PWR_IDLE 
-												|| CurrentState == DIS_DES_FOR_LOW_PWR_IDLE 
-												|| CurrentState == PERIPH_PWR_SHUTDOWN) : 1'bz;
+	assign OutPD = 1'b0; //(OutToADCEnable) ?   (CurrentState == LOW_PWR_IDLE 
+								//				|| CurrentState == DIS_DES_FOR_LOW_PWR_IDLE 
+								//				|| CurrentState == PERIPH_PWR_SHUTDOWN) : 1'bz;
 	assign OutPDQ = 1'b0;	//PDQ is always low for now
 	assign OutCal = (OutToADCEnable) ? (CurrentState == CALIBRATION_REQUEST) : 1'bz; 
+	//assign OutCal = (OutToADCEnable & (CurrentState != CALIBRATION_REQUEST)) ? 0 : 1'bz;
 	
 	assign ADCPower = (CurrentState != ALL_PWR_OFF);
 	assign AnalogPower = (OutToADCEnable) ? 
@@ -102,11 +103,12 @@ module ADC_FSM(
 		case (CurrentState)
 			ALL_PWR_OFF: if(Cmd == "O") NextState = ADC_PWR_WARMUP;
 			ADC_PWR_WARMUP: if(TimerOut[8]) NextState = ANALOG_PWR_WARMUP;	//slightly delay the turn on of the peripheral power by ~1uS
-			ANALOG_PWR_WARMUP: if(TimerOut[7]) NextState = INIT_REG_WRITE;
+			ANALOG_PWR_WARMUP: if(TimerOut[23]) NextState = INIT_REG_WRITE; //Clock can take 10ms to stabilize
 			INIT_REG_WRITE: if (RegWriteDone) NextState = INIT_ADC_WARMUP;
-			INIT_ADC_WARMUP: if(TimerOut[7]) NextState = CALIBRATION_REQUEST;	//take out of PD mode and wait ~500ns
+			//Uncoment after testing calibration procedure INIT_ADC_WARMUP: if(TimerOut[7]) NextState = CALIBRATION_REQUEST;	//take out of PD mode and wait ~500ns
+			INIT_ADC_WARMUP: if(Cmd == "C") NextState = CALIBRATION_REQUEST;
 			CALIBRATION_REQUEST: if(InCalRunning) NextState = CALIBRATION;
-			CALIBRATION: if(~InCalRunning) NextState = ENABLE_DES;
+			CALIBRATION: if(~InCalRunning & Cmd == "N") NextState = ENABLE_DES;
 			ENABLE_DES: if(RegWriteDone) NextState = DES_SAMPLING;
 			DES_SAMPLING: begin
 				if(Cmd == "o" || ~OutToADCEnable) NextState = PERIPH_PWR_SHUTDOWN;

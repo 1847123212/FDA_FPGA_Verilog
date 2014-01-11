@@ -55,9 +55,10 @@ end
 //-------------------------------------------------
 always@(*) begin
 	NewData = CurrentData;
-	if(RxD_data_ready == 1) begin
+	if(RxD_data_ready == 1) 
 		NewData[7:0] = RxD_data[7:0];
-	end
+	else
+		NewData = 8'bzzzzzzzz;
 end
 
 endmodule

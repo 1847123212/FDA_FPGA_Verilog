@@ -74,8 +74,8 @@ module ADC_FSM_TB;
 
 		// Wait 100 ns for global reset to finish
 		#100;
-      #100 Cmd[7:0] = "C";
-		#10 Cmd[7:0] = 8'bzzzzzzzz;		
+      //#100 Cmd[7:0] = "O";
+		//#10 Cmd[7:0] = 8'bzzzzzzzz;		
 	end
 	
 	always 

@@ -100,19 +100,22 @@ module FDA_top(
 
   BUFGCE  BG (.O(clk), .CE(clk_enable), .I(clknub));
   
-  assign GPIO[1] = 1'b1;
-  
 //------------------------------------------------------------------------------
 // UART and device settings/state machines 
 //------------------------------------------------------------------------------
+wire [7:0] StoredDataOut;
+
 `ifndef XILINX_ISIM
 	wire [7:0] DataRxD;
-	wire [7:0] FIFODataOut;
 	wire [7:0] OtherDataOut;
 	wire DataAvailable, ClearData;
-	wire FIFORequestToSend, OtherRequestToSend, FIFODataReceived, OtherDataReceived;
+	wire OtherDataLatch;
 	wire ArmTrigger, TriggerReset, EchoChar;
-
+	wire FIFOTransmitBusy, OtherTransmitBusy;
+	assign OtherTransmitBusy = 1'b0;
+	assign OtherDataOut = 8'b0;
+	assign OtherDataLatch = 1'b0;
+	
 	RxDWrapper RxD (
 		 .Clock(clk), 
 		 .ClearData(ClearData), 
@@ -121,24 +124,16 @@ module FDA_top(
 		 .DataAvailable(DataAvailable)
 		 );
 
-	assign OtherRequestToSend = (EchoChar) ? (DataAvailable & !OtherDataReceived) : 1'b0;
-	assign OtherDataOut = DataRxD;
-
-	reg [1:0] DataHist = 2'b00;
-	always@(posedge clk) begin
-		DataHist[1] <= DataHist[0];
-		DataHist[0] <= DataAvailable;	
-	end
-	assign ClearData = DataHist[1];
-
 	TxDWrapper TxD (
-		 .Clock(clk), 
-		 .Reset(1'b0), 
-		 .Data({FIFODataOut, OtherDataOut}), 
-		 .RequestToSend({FIFORequestToSend, OtherRequestToSend}),
-		 .DataReceivedOut({FIFODataReceived, OtherDataReceived}), 
-		 .SDO(USB_RS232_TXD)
-		 );
+		.Clock(clk), 
+		.Reset(1'b0), 
+		.Data({StoredDataOut, OtherDataOut}), 
+		.LatchData({DataValid, OtherDataLatch}), 
+		.Busy({FIFOTransmitBusy, OtherTransmitBusy}), 
+		.SDO(USB_RS232_TXD)
+	);
+	
+	assign ReadEnable = ~FIFOTransmitBusy & DataReadyToSend;
 `endif
 
 EchoCharFSM EchoSetting (
@@ -146,13 +141,15 @@ EchoCharFSM EchoSetting (
     .Reset(1'b0), 
     .Cmd(DataRxD), 
     .EchoChar(EchoChar)
-    );	 
+    );
+	 
+wire Red, Green, Blue;
 
 RGBFSM RGBControl(
 	.Clock(clk),
 	.Reset(1'b0),
 	.Cmd(DataRxD),
-	.RGB({GPIO[0], GPIO[2], GPIO[3]})
+	.RGB({Red, Green, Blue})
 	);
 
 //------------------------------------------------------------------------------
@@ -164,6 +161,8 @@ RGBFSM RGBControl(
 //is high
 wire OutToADCEnable, ADCSleep, ADCWake; 
 assign OutToADCEnable = (PWR_INT == 1 && ADC_PWR_EN == 1);
+assign ADCSleep = 0;
+assign ADCWake = 0;
 
 ADC_FSM ADC_controller (
     .Clock(clk), 
@@ -207,8 +206,20 @@ ADC_Clk_Manager ADC_Clock
     .RESET(1'b0),// IN
     .LOCKED(ADCClockLocked));      // OUT
 
+assign GPIO[1] = 0;
+assign GPIO[0] = Red;
+assign GPIO[2] = (ADCClockLocked); //green
+assign GPIO[3] = (ClockLogic); //blue
+
+reg [1:0] InputClockOn = 2'b00;
+wire ClockLogic;
+assign ClockLogic = (InputClockOn[1] != InputClockOn[0]); 
+always@(ADCClock) begin
+	InputClockOn <= {InputClockOn[0], ClkADC2DCM};
+end
+
 //------------------------------------------------------------------------------
-// ADC Data Input 
+// ADC Data Input Registers
 //------------------------------------------------------------------------------
 wire [31:0] ADCRegDataOut;		//DQD, DQ, DID, DI
 ADCDataInput ADC_Data_Capture (
@@ -222,53 +233,20 @@ ADCDataInput ADC_Data_Capture (
 //------------------------------------------------------------------------------
 // Data FIFOs 
 //------------------------------------------------------------------------------
-wire FifoRst = 1'b0;
-wire FifoReadEn, FifoWriteEn;
-wire SideFull, TopFull, BottomFull; 
-wire SideEmpty, TopEmpty, BottomEmpty;
-wire SideValid, TopValid, BottomValid;
-wire [31:0] FifoDataOut;	//This data is in chronological order: [31:25] is DQD (oldest), 
-									// [24:16] is DID, [8:15] is DQ, [7:0] is DI 
+wire FifoNotFull; 
 
-FIFO_11bit FIFO_Side_Inputs (
-  .rst(FifoRst), // input rst
-  .wr_clk(ADCClock), // input wr_clk
-  .rd_clk(clk), // input rd_clk
-  .din({ADCRegDataOut[31:26], ADCRegDataOut[15:11]}), // input [10 : 0] din
-  .wr_en(FifoWriteEn), // input wr_en
-  .rd_en(FifoReadEn), // input rd_en
-  .dout({FifoDataOut[7:2], FifoDataOut[15:11]}), // output [10 : 0] dout
-  .full(SideFull), // output full
-  .empty(SideEmpty), // output empty
-  .valid(SideValid) // output valid
-);
-
-FIFO_11bit FIFO_Bottom_Inputs (
-  .rst(FifoRst), // input rst
-  .wr_clk(ADCClockDelayed), // input wr_clk
-  .rd_clk(clk), // input rd_clk
-  .din(ADCRegDataOut[10:0]), // input [10 : 0] din
-  .wr_en(FifoWriteEn), // input wr_en
-  .rd_en(FifoReadEn), // input rd_en
-  .dout({FifoDataOut[10:8], FifoDataOut [31:24]}), // output [10 : 0] dout
-  .full(BottomFull), // output full
-  .empty(BottomEmpty), // output empty
-  .valid(BottomValid) // output valid
-);
-
-FIFO_10bit FIFO_Top_Inputs (
-  .rst(FifoRst), // input rst
-  .wr_clk(ADCClockDelayed), // input wr_clk
-  .rd_clk(clk), // input rd_clk
-  .din(ADCRegDataOut[25:16]), // input [9 : 0] din
-  .wr_en(FifoWriteEn), // input wr_en
-  .rd_en(FifoReadEn), // input rd_en
-  .dout({FifoDataOut[1:0], FifoDataOut[23:16]}), // output [9 : 0] dout
-  .full(TopFull), // output full
-  .empty(TopEmpty), // output empty
-  .valid(TopValid) // output valid
-);
-
-
+DataStorage Fifos (
+    .DataIn(ADCRegDataOut), 
+    .DataOut(StoredDataOut), 
+    .WriteStrobe(EchoChar),			//For now, store and transmit data when EchoChar set 
+    .ReadEnable(ReadEnable), 
+    .WriteClock(ADCClock), 
+    .WriteClockDelayed(ADCClockDelayed), 
+    .ReadClock(clk), 
+    .Reset(1'b0), 
+    .DataValid(DataValid), 
+    .FifoNotFull(FifoNotFull), 
+    .DataReadyToSend(DataReadyToSend)
+    );
 
 endmodule

@@ -21,7 +21,7 @@
 module DataStorage(
     input [31:0] DataIn,
     output [7:0] DataOut,
-    input WriteEnable,
+    input WriteStrobe,
     input ReadEnable,
     input WriteClock,
     input WriteClockDelayed,
@@ -44,7 +44,7 @@ wire FifosEmpty = (SideEmpty && TopEmpty && BottomEmpty);
 wire FifosFull = (SideFull || TopFull || BottomFull);
 
 reg StoringData;
-assign FifoNotFull = (~CurrentState[1] && ~FifosFull);
+assign FifoNotFull = (~CurrentState[1]);
 assign DataReadyToSend = ~ConverterEmpty;
 
 localparam 	READY_TO_STORE = 2'b00,
@@ -54,16 +54,26 @@ localparam 	READY_TO_STORE = 2'b00,
 reg [1:0] CurrentState = SENDING_DATA;
 reg [1:0] NextState = SENDING_DATA;
 
+reg [1:0] WriteEnableEdge = 2'b00;
+assign WriteEnable = (CurrentState == STORING_DATA);
+
+
 always@(posedge ReadClock) begin
-	if(Reset) CurrentState <= READY_TO_STORE;
-	else CurrentState <= NextState;		
+	if(Reset) begin
+		CurrentState <= READY_TO_STORE;
+		WriteEnableEdge <= 2'b00;
+	end
+	else begin
+		CurrentState <= NextState;		
+		WriteEnableEdge <= {WriteEnableEdge[0], WriteStrobe};
+	end
 end
 
 always@(*) begin
 	NextState = CurrentState;
 	case (CurrentState)
 		READY_TO_STORE: begin
-			if(~FifosEmpty) NextState = STORING_DATA;
+			if(WriteEnableEdge == 2'b01) NextState = STORING_DATA;
 		end
 		STORING_DATA:begin
 			if(FifosFull) NextState = SENDING_DATA;
@@ -113,7 +123,8 @@ FIFO_10bit FIFO_Top_Inputs (
   .valid(TopValid) // output valid
 );
 
-assign FifoReadEn = (~ConverterFull &&  ~FifosEmpty);	// Read from FIFOs when the converter is not full and the FIFOs are not empty
+wire ConverterAlmostFull;
+assign FifoReadEn = (~ConverterAlmostFull &&  ~FifosEmpty);	// Read from FIFOs when the converter is not full and the FIFOs are not empty
 
 FIFO_32to8 DataWidthConverter (
   .rst(Reset), // input rst
@@ -124,6 +135,7 @@ FIFO_32to8 DataWidthConverter (
   .rd_en(ReadEnable), // input rd_en
   .dout(DataOut), // output [7 : 0] dout
   .full(ConverterFull), // output full
+  .almost_full(ConverterAlmostFull),
   .empty(ConverterEmpty), // output empty
   .valid(DataValid) // output valid
 );

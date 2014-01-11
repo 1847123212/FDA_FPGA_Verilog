@@ -7,9 +7,9 @@ CONFIG VCCAUX=3.3;
 # ADC Control Pins
 # Pull these down to ensure that the ADC does not see any voltage on its pins
 ############################################################################
-NET "ADC_CAL" 			LOC = P32 	| IOSTANDARD = LVCMOS18 | PULLDOWN;
-NET "ADC_PD" 			LOC = P33 	| IOSTANDARD = LVCMOS18 | PULLDOWN;
-NET "ADC_CALRUN" 		LOC = P34 	| IOSTANDARD = LVCMOS18 | PULLDOWN;
+NET "ADC_CAL" 			LOC = P32 	| IOSTANDARD = LVCMOS18 ;
+NET "ADC_PD" 			LOC = P33 	| IOSTANDARD = LVCMOS18 ;
+NET "ADC_CALRUN" 		LOC = P34 	| IOSTANDARD = LVCMOS18 ;
 NET "ADC_SDATA" 		LOC = P75 	| IOSTANDARD = LVCMOS18 | PULLDOWN;
 NET "ADC_SCLK" 		LOC = P78 	| IOSTANDARD = LVCMOS18 | PULLDOWN;
 NET "ADC_SCS" 			LOC = P79 	| IOSTANDARD = LVCMOS18 | PULLDOWN;
@@ -43,11 +43,11 @@ NET "USB_RS232_RXD" 	LOC = P67 | IOSTANDARD = LVCMOS33;
 # Clock Pins 
 ############################################################################
 NET "ADC_CLK_N" 		LOC = P126 	| TNM_NET = "tnm_ADC_CLK_N" | IOSTANDARD = LVDS_33;
-#TIMESPEC "TS_ADC_CLK_P" = PERIOD "tnm_ADC_CLK_P" 4 ns HIGH 50%;
+#TIMESPEC "TS_ADC_CLK_N" = PERIOD "tnm_ADC_CLK_P" 4 ns HIGH 50%;
 
 NET "ADC_CLK_P" 		LOC = P127 	| TNM_NET = "ADC_CLK_P" | IOSTANDARD = LVDS_33;
-#TIMESPEC TS_ADC_CLK_N = PERIOD "ADC_CLK_N" 250 MHz HIGH 50%;
-#According to forum, just apply 
+TIMESPEC TS_ADC_CLK_P = PERIOD "ADC_CLK_P" 250 MHz HIGH 50%;
+#According to forum, just apply to one half of LVDS clock
 
 NET "CLK_100MHZ" 		LOC = P55 	| IOSTANDARD = LVCMOS33	| TNM_NET = "CLK_100MHZ";
 TIMESPEC "TS_CLK_100MHZ" = PERIOD "CLK_100MHZ" 10 ns HIGH 50 %;

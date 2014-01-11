@@ -44,7 +44,7 @@ module ADCExtendedControl(
 	wire EnAddrCount, EnBitCount, EnSClkCounter;
 	wire ClrBitC, ClrSclkC, ClrAddrC;
 	wire [4:0] BitNumber;
-	wire done;
+	assign ClrAddrC = 1'b0;
 
 	reg [3:0] InitAddrValue = 4'b0000;
 
@@ -138,8 +138,8 @@ module ADCExtendedControl(
 	
 	//logic
 	//Initalize counters and memory address for ROM
-	assign ClrBitCount = (CurrentState[2] == 1);
-	assign ClrClkCount = (CurrentState[2] == 1);	
+	assign ClrBitC = (CurrentState[2] == 1);
+	assign ClrSclkC = (CurrentState[2] == 1);	
 	assign LoadAddr = (CurrentState[2] == 1);
 	
 	//increment the bit every negative transition on clk

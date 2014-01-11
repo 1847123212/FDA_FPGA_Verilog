@@ -18,7 +18,7 @@ module async_transmitter(
 	output TxD,
 	output TxD_busy
 );
-parameter ClkFrequency = 100000000;	// 25MHz
+parameter ClkFrequency = 100000000;	// 100MHz
 parameter Baud = 921600;
 
 //generate
@@ -80,7 +80,7 @@ module async_receiver(
 //	output RxD_idle,  // asserted when no data has been received for a while
 //	output reg RxD_endofpacket = 0  // asserted for one clock cycle when a packet has been detected (i.e. RxD_idle is going high)
 );
-parameter ClkFrequency = 100000000; // changed to 40MHz
+parameter ClkFrequency = 100000000; // changed to 100MHz
 parameter Baud = 921600;
 parameter Oversampling = 8;  // usually 8 or 16 (needs to be a power of 2)
 // we oversample the RxD line at a fixed rate to capture each RxD data bit at the "right" time
@@ -169,8 +169,8 @@ endmodule
 
 ////////////////////////////////////////////////////////
 // dummy module used to be able to raise an assertion in Verilog
-module ASSERTION_ERROR();
-endmodule
+//module ASSERTION_ERROR();
+//endmodule
 
 
 ////////////////////////////////////////////////////////

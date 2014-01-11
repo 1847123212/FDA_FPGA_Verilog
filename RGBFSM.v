@@ -48,7 +48,7 @@ end
 //------------------------------------------
 //Conditional State Transition
 //------------------------------------------
-always@(Cmd) begin
+always@(*) begin
 	NextState = CurrentState;
 	case (CurrentState)
 		nnn: begin
