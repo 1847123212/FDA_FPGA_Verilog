@@ -45,6 +45,7 @@ module FIFO_32to8(
   rd_en,
   dout,
   full,
+  almost_full,
   empty,
   valid
 );
@@ -57,6 +58,7 @@ input wr_en;
 input rd_en;
 output [7 : 0] dout;
 output full;
+output almost_full;
 output empty;
 output valid;
 
@@ -111,7 +113,7 @@ output valid;
     .C_FAMILY("spartan6"),
     .C_FULL_FLAGS_RST_VAL(1),
     .C_HAS_ALMOST_EMPTY(0),
-    .C_HAS_ALMOST_FULL(0),
+    .C_HAS_ALMOST_FULL(1),
     .C_HAS_AXI_ARUSER(0),
     .C_HAS_AXI_AWUSER(0),
     .C_HAS_AXI_BUSER(0),
@@ -262,6 +264,7 @@ output valid;
     .RD_EN(rd_en),
     .DOUT(dout),
     .FULL(full),
+    .ALMOST_FULL(almost_full),
     .EMPTY(empty),
     .VALID(valid),
     .BACKUP(),
@@ -279,7 +282,6 @@ output valid;
     .INT_CLK(),
     .INJECTDBITERR(),
     .INJECTSBITERR(),
-    .ALMOST_FULL(),
     .WR_ACK(),
     .OVERFLOW(),
     .ALMOST_EMPTY(),
