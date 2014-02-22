@@ -40,8 +40,8 @@ module FDA_top(
 	output ADC_PWR_EN,
 	
 	//I2C
-	input SCL,
-	input SDA,
+	output SCL,
+	inout SDA,
 	
 	//Fast trigger 
 	input TRIGGER_RST_P,
@@ -148,9 +148,41 @@ wire Red, Green, Blue;
 RGBFSM RGBControl(
 	.Clock(clk),
 	.Reset(1'b0),
+	.NewCmd(DataAvailable),
 	.Cmd(DataRxD),
 	.RGB({Red, Green, Blue})
 	);
+
+wire [6:0] I2Caddr;
+wire [15:0] I2Cdata;
+wire I2Cbytes, I2Cr_w, I2C_load, I2CBusy, I2CDataReady;
+
+DACControlFSM DAC (
+    .clk(clk), 
+    .UART_Rx(DataRxD), 
+    .UART_DataReady(DataAvailable), 
+    .UART_Tx(OtherDataOut), 
+    .I2Caddr(I2Caddr), 
+    .I2Cdata(I2Cdata), 
+    .I2Cbytes(I2Cbytes), 
+    .I2Cr_w(I2Cr_w), 
+    .I2C_load(I2C_load), 
+    .I2CBusy(I2CBusy), 
+    .I2CDataReady(I2CDataReady)
+    );
+
+I2C_Comm I2C (
+    .clk(clk), 
+    .SDA(SDA), 
+    .SCL(SCL), 
+    .data(I2Cdata), 
+    .load(I2C_load), 
+    .addr(I2Caddr), 
+    .numBytes(I2Cbytes), 
+    .rd_wr(I2Cr_w), 
+    .busy(I2CBusy), 
+    .dataReady(I2CDataReady)
+    );
 
 //------------------------------------------------------------------------------
 // ADC communication and control
@@ -168,6 +200,7 @@ ADC_FSM ADC_controller (
     .Clock(clk), 
     .Reset(1'b0), 
     .Cmd(DataRxD), 
+	 .NewCmd(DataAvailable),
     .OutToADCEnable(OutToADCEnable), 
     .Sleep(ADCSleep), 
     .WakeUp(ADCWake), 
@@ -214,7 +247,7 @@ assign GPIO[3] = (ClockLogic); //blue
 reg [1:0] InputClockOn = 2'b00;
 wire ClockLogic;
 assign ClockLogic = (InputClockOn[1] != InputClockOn[0]); 
-always@(ADCClock) begin
+always@(posedge ADCClock) begin
 	InputClockOn <= {InputClockOn[0], ClkADC2DCM};
 end
 

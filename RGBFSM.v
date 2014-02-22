@@ -22,6 +22,7 @@ module RGBFSM(
 	input wire Clock,
 	input wire Reset,
 	input wire [7:0] Cmd,
+	input wire NewCmd,
 	output reg [2:0] RGB
     );
 
@@ -52,44 +53,44 @@ always@(*) begin
 	NextState = CurrentState;
 	case (CurrentState)
 		nnn: begin
-				if(Cmd==82) NextState = rnn;
-				else if(Cmd==71) NextState = ngn;
-				else if(Cmd==66) NextState = nnb;
+				if(NewCmd && Cmd==82) NextState = rnn;
+				else if(NewCmd && Cmd==71) NextState = ngn;
+				else if(NewCmd && Cmd==66) NextState = nnb;
 			end
 		rnn: begin
-				if(Cmd==82) NextState = nnn;
-				else if(Cmd==71) NextState = rgn;
-				else if(Cmd==66) NextState = rnb;
+				if(NewCmd && Cmd==82) NextState = nnn;
+				else if(NewCmd && Cmd==71) NextState = rgn;
+				else if(NewCmd && Cmd==66) NextState = rnb;
 			end
 		rgn: begin
-				if(Cmd==82) NextState = ngn;
-				else if(Cmd==71) NextState = rnn;
-				else if(Cmd==66) NextState = rgb;
+				if(NewCmd && Cmd==82) NextState = ngn;
+				else if(NewCmd && Cmd==71) NextState = rnn;
+				else if(NewCmd &&Cmd==66) NextState = rgb;
 			end
 		rnb: begin
-				if(Cmd==82) NextState = nnb;
-				else if(Cmd==71) NextState = rgb;
-				else if(Cmd==66) NextState = rnn;
+				if(NewCmd && Cmd==82) NextState = nnb;
+				else if(NewCmd && Cmd==71) NextState = rgb;
+				else if(NewCmd && Cmd==66) NextState = rnn;
 			end
 		rgb: begin
-				if(Cmd==82) NextState = ngb;
-				else if(Cmd==71) NextState = rnb;
-				else if(Cmd==66) NextState = rgn;
+				if(NewCmd && Cmd==82) NextState = ngb;
+				else if(NewCmd && Cmd==71) NextState = rnb;
+				else if(NewCmd && Cmd==66) NextState = rgn;
 			end
 		ngn: begin
-				if(Cmd==82) NextState = rgn;
-				else if(Cmd==71) NextState = nnn;
-				else if(Cmd==66) NextState = ngb;
+				if(NewCmd && Cmd==82) NextState = rgn;
+				else if(NewCmd && Cmd==71) NextState = nnn;
+				else if(NewCmd && Cmd==66) NextState = ngb;
 			end
 		ngb: begin
-				if(Cmd==82) NextState = rgb;
-				else if(Cmd==71) NextState = nnb;
-				else if(Cmd==66) NextState = ngn;
+				if(NewCmd && Cmd==82) NextState = rgb;
+				else if(NewCmd && Cmd==71) NextState = nnb;
+				else if(NewCmd && Cmd==66) NextState = ngn;
 			end
 		nnb: begin
-				if(Cmd==82) NextState = rnb;
-				else if(Cmd==71) NextState = ngb;
-				else if(Cmd==66) NextState = nnn;
+				if(NewCmd && Cmd==82) NextState = rnb;
+				else if(NewCmd && Cmd==71) NextState = ngb;
+				else if(NewCmd && Cmd==66) NextState = nnn;
 			end
 	endcase
 end

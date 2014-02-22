@@ -35,8 +35,8 @@ T	- Enable the data trigger
 t	- Disable the data trigger
 U
 u
-V
-v
+V	- Set trigger voltage level - must be followed by ten 1s or 0s
+v	- Read trigger voltage level
 W	- Wake up ADC from low power idle
 w
 X	- Record and transmit data

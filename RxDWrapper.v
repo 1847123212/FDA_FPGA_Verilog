@@ -23,20 +23,29 @@ module RxDWrapper(
 	input ClearData,
 	input SDI,
 	output reg [7:0] CurrentData,
-	output DataAvailable
+	output reg DataAvailable
    );
-	
-reg [7:0] NewData;
-wire RxD_data_ready;
+
+wire RxD_data_ready, dataReady;
 wire [7:0] RxD_data;
 
 async_receiver rxd (
     .clk(Clock), 
     .RxD(SDI), 
-    .RxD_data_ready(RxD_data_ready), 
+    .RxD_data_ready(dataReady), 
     .RxD_data(RxD_data) 
     );
 
+always@(posedge Clock) begin
+	if(dataReady) begin
+		CurrentData <= RxD_data;
+		DataAvailable <= 1'b1;
+	end else
+		DataAvailable <= 0;
+end
+
+/**
+CURRENTLY JUST PASSING DATA THROUGH.>> MAYBE ADD BUFFERING LATER
 
 assign DataAvailable = (CurrentData > 8'b0);
 
@@ -60,5 +69,7 @@ always@(*) begin
 	else
 		NewData = 8'bzzzzzzzz;
 end
+
+**/
 
 endmodule
