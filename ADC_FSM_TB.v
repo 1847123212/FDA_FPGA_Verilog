@@ -28,6 +28,7 @@ module ADC_FSM_TB;
 	reg Clock;
 	reg Reset;
 	reg [7:0] Cmd;
+	reg NewCmd;
 	reg OutToADCEnable;
 	reg Sleep;
 	reg WakeUp;
@@ -47,7 +48,8 @@ module ADC_FSM_TB;
 	ADC_FSM uut (
 		.Clock(Clock), 
 		.Reset(Reset), 
-		.Cmd(Cmd), 
+		.Cmd(Cmd),
+		.NewCmd(NewCmd),
 		.OutToADCEnable(OutToADCEnable && ADCPower), 
 		.Sleep(Sleep), 
 		.WakeUp(WakeUp), 
@@ -64,9 +66,10 @@ module ADC_FSM_TB;
 
 	initial begin
 		// Initialize Inputs
-		Clock = 0;
+		Clock = 1;
 		Reset = 0;
 		Cmd = 0;
+		NewCmd = 0;
 		OutToADCEnable = 1;
 		Sleep = 0;
 		WakeUp = 0;
@@ -74,8 +77,15 @@ module ADC_FSM_TB;
 
 		// Wait 100 ns for global reset to finish
 		#100;
-      //#100 Cmd[7:0] = "O";
-		//#10 Cmd[7:0] = 8'bzzzzzzzz;		
+      #100 Cmd[7:0] = "C";
+		NewCmd = 1;
+		#10 NewCmd = 0;
+      #200 Cmd[7:0] = "N";
+		NewCmd = 1;
+		#10 NewCmd = 0;
+      #6000 Cmd[7:0] = "o";
+		NewCmd = 1;
+		#10 NewCmd = 0;
 	end
 	
 	always 

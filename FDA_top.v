@@ -195,6 +195,7 @@ wire OutToADCEnable, ADCSleep, ADCWake;
 assign OutToADCEnable = (PWR_INT == 1 && ADC_PWR_EN == 1);
 assign ADCSleep = 0;
 assign ADCWake = 0;
+wire [3:0] ADC_State;
 
 ADC_FSM ADC_controller (
     .Clock(clk), 
@@ -212,7 +213,8 @@ ADC_FSM ADC_controller (
     .OutPD(ADC_PD), 
     .OutPDQ(ADC_PDQ), 
     .OutCal(ADC_CAL), 
-    .InCalRunning(ADC_CALRUN)
+    .InCalRunning(ADC_CALRUN),
+	 .State(ADC_State)
     );
 
 //------------------------------------------------------------------------------
@@ -240,9 +242,9 @@ ADC_Clk_Manager ADC_Clock
     .LOCKED(ADCClockLocked));      // OUT
 
 assign GPIO[1] = 0;
-assign GPIO[0] = Red;
-assign GPIO[2] = (ADCClockLocked); //green
-assign GPIO[3] = (ClockLogic); //blue
+assign GPIO[0] = ADC_State[2];	//Red;					//red
+assign GPIO[2] = ADC_State[0];		//(ADCClockLocked); //green
+assign GPIO[3] = ADC_State[1];		//(ClockLogic); //blue
 
 reg [1:0] InputClockOn = 2'b00;
 wire ClockLogic;

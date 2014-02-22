@@ -38,7 +38,9 @@ module ADC_FSM(
 	 output OutPD,
 	 output OutPDQ,
 	 output OutCal,
-	 input InCalRunning
+	 input InCalRunning,
+	 
+	 output [3:0] State
     );
 
 	localparam 	ALL_PWR_OFF = 4'd0,
@@ -56,13 +58,16 @@ module ADC_FSM(
 					DIS_DES_FOR_CAL = 4'd12 ,
 					PERIPH_PWR_SHUTDOWN = 4'd13;
 
-`ifdef XILINX_ISIM				
+`ifdef XILINX_ISIM
+	//This is to avoid the long warm up period 
 	reg [3:0] CurrentState = INIT_ADC_WARMUP;
 	reg [3:0] NextState = INIT_ADC_WARMUP;
 `else
 	reg [3:0] CurrentState = ALL_PWR_OFF;
 	reg [3:0] NextState = ALL_PWR_OFF;
 `endif
+	
+	assign State = CurrentState;
 	
 	wire TimerEnable, TimerClear;
 	wire [23:0] TimerOut;
@@ -78,8 +83,7 @@ module ADC_FSM(
 								//				|| CurrentState == DIS_DES_FOR_LOW_PWR_IDLE 
 								//				|| CurrentState == PERIPH_PWR_SHUTDOWN) : 1'bz;
 	assign OutPDQ = 1'b0;	//PDQ is always low for now
-	assign OutCal = (OutToADCEnable) ? (CurrentState == CALIBRATION_REQUEST) : 1'bz; 
-	//assign OutCal = (OutToADCEnable & (CurrentState != CALIBRATION_REQUEST)) ? 0 : 1'bz;
+	assign OutCal = (OutToADCEnable & (CurrentState != CALIBRATION_REQUEST)) ? 0 : 1'bz;
 	
 	assign ADCPower = (CurrentState != ALL_PWR_OFF);
 	assign AnalogPower = (OutToADCEnable) ? 
