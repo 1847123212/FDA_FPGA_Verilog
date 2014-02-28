@@ -2,8 +2,8 @@ A	-
 a	- 
 B	- Toggle blue LED
 C	- Run ADC calibration
-D	- **NOT IMPLEMMENTED**Enable dual edge sampling (DES) on ADC
-d	- **NOT IMPLEMMENTED**Disable DES 
+D	- NOT IMPLEMMENTED**Enable dual edge sampling (DES) on ADC
+d	- NOT IMPLEMMENTED**Disable DES 
 E	- Turn on received character echo
 e 	- Turn off received character echo
 F
@@ -33,7 +33,7 @@ S	- Put ADC in low power (sleep) idle.
 s
 T	- Enable the data trigger
 t	- Disable the data trigger
-U
+U	- Clear the data trigger 
 u
 V	- Set trigger voltage level - must be followed by ten 1s or 0s
 v	- Read trigger voltage level

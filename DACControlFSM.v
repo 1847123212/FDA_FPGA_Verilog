@@ -20,9 +20,10 @@
 //////////////////////////////////////////////////////////////////////////////////
 module DACControlFSM(
     input clk,
-    input [7:0] UART_Rx,
-	 input UART_DataReady,
-	 output [7:0] UART_Tx,
+    input setV,
+	 input setV_1,
+	 input setV_0,
+	 input resetTrigV,
     output [6:0] I2Caddr,
     output [15:0] I2Cdata,
 	 output I2Cbytes,
@@ -65,53 +66,38 @@ module DACControlFSM(
 	begin
 		if(State == IDLE)
 			DataReg[15:0] <= 16'b0;
-		else if(State!= TRANSMIT && UART_DataReady)
-			DataReg[15:2] <= {DataReg[14:2], UART_Rx[0]}; //last two bits are always 0;
+		else if(State!= TRANSMIT && setV_1)
+			DataReg[15:2] <= {DataReg[14:2], 1'b1}; //last two bits are always 0;
+		else if(State!= TRANSMIT && setV_0)
+			DataReg[15:2] <= {DataReg[14:2], 1'b0}; //last two bits are always 0;
 	end		
 		
 	always@(posedge clk) begin
-		State <= NextState;
+		if(resetTrigV)
+			State <= IDLE;
+		else
+			State <= NextState;
 	end
 	
 	always@(*) begin
 		NextState = State;
 		case(State)
 			IDLE: begin
-				if(UART_DataReady && (UART_Rx == "V")) 
+				if(setV)
 					NextState = RECB9;
 //				else if (UART_Rx == "v") 
 //					NextState = GETDACVAL;
 			end
-			RECB9:
-				if(UART_DataReady)
-					NextState = ((UART_Rx == 8'd48) || (UART_Rx == 8'd49)) ? RECB8 : IDLE;
-			RECB8:
-				if(UART_DataReady)
-					NextState = ((UART_Rx == 8'd48) || (UART_Rx == 8'd49)) ? RECB7 : IDLE;			
-			RECB7:
-				if(UART_DataReady)
-					NextState = ((UART_Rx == 8'd48) || (UART_Rx == 8'd49)) ? RECB6 : IDLE;
-			RECB6:
-				if(UART_DataReady)
-					NextState = ((UART_Rx == 8'd48) || (UART_Rx == 8'd49)) ? RECB5 : IDLE;
-			RECB5:
-				if(UART_DataReady)
-					NextState = ((UART_Rx == 8'd48) || (UART_Rx == 8'd49)) ? RECB4 : IDLE;
-			RECB4:
-				if(UART_DataReady)
-					NextState = ((UART_Rx == 8'd48) || (UART_Rx == 8'd49)) ? RECB3 : IDLE;
-			RECB3:
-				if(UART_DataReady)
-					NextState = ((UART_Rx == 8'd48) || (UART_Rx == 8'd49)) ? RECB2 : IDLE;
-			RECB2:
-				if(UART_DataReady)
-					NextState = ((UART_Rx == 8'd48) || (UART_Rx == 8'd49)) ? RECB1 : IDLE;
-			RECB1:
-				if(UART_DataReady)
-					NextState = ((UART_Rx == 8'd48) || (UART_Rx == 8'd49)) ? RECB0 : IDLE;
-			RECB0:
-				if(UART_DataReady)
-					NextState = ((UART_Rx == 8'd48) || (UART_Rx == 8'd49)) ? TRANSMIT: IDLE;
+			RECB9: if(setV_1 || setV_0) NextState = RECB8;
+			RECB8: if(setV_1 || setV_0) NextState = RECB7;
+			RECB7: if(setV_1 || setV_0) NextState = RECB6;
+			RECB6: if(setV_1 || setV_0) NextState = RECB5;
+			RECB5: if(setV_1 || setV_0) NextState = RECB4;
+			RECB4: if(setV_1 || setV_0) NextState = RECB3;
+			RECB3: if(setV_1 || setV_0) NextState = RECB2;
+			RECB2: if(setV_1 || setV_0) NextState = RECB1;
+			RECB1: if(setV_1 || setV_0) NextState = RECB0;
+			RECB0: if(setV_1 || setV_0) NextState = TRANSMIT;
 			TRANSMIT: NextState = IDLE;
 		endcase
 	end

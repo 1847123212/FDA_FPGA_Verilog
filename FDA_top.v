@@ -44,8 +44,8 @@ module FDA_top(
 	inout SDA,
 	
 	//Fast trigger 
-	input TRIGGER_RST_P,
-	input TRIGGER_RST_N,
+	output TRIGGER_RST_P,
+	output TRIGGER_RST_N,
 	input DATA_TRIGGER_N,
 	input DATA_TRIGGER_P,
 	
@@ -107,61 +107,131 @@ wire [7:0] StoredDataOut;
 
 `ifndef XILINX_ISIM
 	wire [7:0] DataRxD;
-	wire [7:0] OtherDataOut;
+	wire [7:0] txData;
+	wire [7:0] Cmd;
 	wire DataAvailable, ClearData;
 	wire OtherDataLatch;
 	wire ArmTrigger, TriggerReset, EchoChar;
-	wire FIFOTransmitBusy, OtherTransmitBusy;
-	assign OtherTransmitBusy = 1'b0;
-	assign OtherDataOut = 8'b0;
-	assign OtherDataLatch = 1'b0;
+	wire FIFOTransmitBusy;
+	
+	assign ClearData = 1'b0;
 	
 	RxDWrapper RxD (
 		 .Clock(clk), 
 		 .ClearData(ClearData), 
 		 .SDI(USB_RS232_RXD), 
-		 .CurrentData(DataRxD), 
-		 .DataAvailable(DataAvailable)
+		 .CurrentData(Cmd), 
+		 .DataAvailable(NewCmd)
 		 );
-
+		 
 	TxDWrapper TxD (
-		.Clock(clk), 
-		.Reset(1'b0), 
-		.Data({StoredDataOut, OtherDataOut}), 
-		.LatchData({DataValid, OtherDataLatch}), 
-		.Busy({FIFOTransmitBusy, OtherTransmitBusy}), 
-		.SDO(USB_RS232_TXD)
-	);
+		 .Clock(clk), 
+		 .Reset(1'b0), 
+		 .ADCData(StoredDataOut), 
+		 .generalData(txData), 
+		 .generalDataWrite(txDataWr), 
+		 .adcDataStreamingMode(DataReadyToSend),  //input equal to adc fifo not empty
+		 .adcDataValid(DataValid), 					//input to UART Start signal
+		 .adcDataStrobe(adcDataRead),					//output to adc FIFO 
+		 .SDO(USB_RS232_TXD)
+		 );
 	
-	assign ReadEnable = ~FIFOTransmitBusy & DataReadyToSend;
 `endif
 
-EchoCharFSM EchoSetting (
-    .Clock(clk),
-    .Reset(1'b0), 
-    .Cmd(DataRxD), 
-    .EchoChar(EchoChar)
+wire recordData, adcPwrOn;
+wire [3:0] adcState;
+
+//Main FSM for handling UART I/O
+Main_FSM SystemFSM (
+    .clk(clk), 
+    .Cmd(Cmd), 
+    .NewCmd(NewCmd), 
+	 .adcState(adcState),
+    .echoChar(echoChar), 
+    .echoOn(echoOn), 
+    .echoOff(echoOff), 
+    .adcPwrOn(adcPwrOn), 
+    .adcPwrOff(adcPwrOff), 
+    .adcSleep(adcSleep), 
+    .adcEnDes(adcEnDes), 
+    .adcDisDes(adcDisDes), 
+    .recordData(recordData), 
+    .triggerOn(triggerOn), 
+    .triggerOff(triggerOff), 
+    .triggerReset(triggerReset), 
+    .setTriggerV(setTriggerV), 
+    .setTriggerV_1(setTriggerV_1), 
+    .setTriggerV_0(setTriggerV_0), 
+    .adcWake(adcWake), 
+    .adcRunCal(adcRunCal), 
+    .resetTrigV(resetTrigV), 
+    .txData(txData), 
+    .txDataWr(txDataWr)
+    );
+
+
+//Control whether to echo received characters or not
+SystemSetting EchoSetting (
+    .clk(clk), 
+    .turnOn(echoOn), 
+    .turnOff(echoOff), 
+    .toggle(1'b0), 
+    .out(echoChar)
+    );
+
+wire triggerArmed;
+SystemSetting TriggerArm (
+    .clk(clk), 
+    .turnOn(triggerOn), 
+    .turnOff(triggerOff), 
+    .toggle(1'b0), 
+    .out(triggerArmed)
     );
 	 
 wire Red, Green, Blue;
 
-RGBFSM RGBControl(
-	.Clock(clk),
-	.Reset(1'b0),
-	.NewCmd(DataAvailable),
-	.Cmd(DataRxD),
-	.RGB({Red, Green, Blue})
-	);
+//------------------------------------------------------------------------------
+// Trigger
+//------------------------------------------------------------------------------
+wire triggered;
+TriggerControl TriggerController (
+    .clk(clk), 
+    .t_p(DATA_TRIGGER_P), 
+    .t_n(DATA_TRIGGER_N), 
+    .armed(triggerArmed),				 
+    .t_reset(triggerReset),
+    .triggered(triggered), 	
+    .comp_reset_high(TRIGGER_RST_P), 
+    .comp_reset_low(TRIGGER_RST_N)
+    );
+	 
+//------------------------------------------------------------------------------
+// GPIO
+//------------------------------------------------------------------------------
+assign GPIO[1] = 0;
+assign GPIO[0] = ADCClockLocked;		//Red;					//red
+assign GPIO[2] =	~triggerArmed;		//(ADCClockLocked); 	//green
+assign GPIO[3] =  ~triggered;			//(ClockLogic); 			//blue
 
+//------------------------------------------------------------------------------
+// I2C Communication and Devices
+//------------------------------------------------------------------------------
 wire [6:0] I2Caddr;
 wire [15:0] I2Cdata;
 wire I2Cbytes, I2Cr_w, I2C_load, I2CBusy, I2CDataReady;
 
+/**
+    .setTriggerV(setTriggerV), 
+    .setTriggerV_1(setTriggerV_1), 
+    .setTriggerV_0(setTriggerV_0), 
+**/
+
 DACControlFSM DAC (
-    .clk(clk), 
-    .UART_Rx(DataRxD), 
-    .UART_DataReady(DataAvailable), 
-    .UART_Tx(OtherDataOut), 
+    .clk(clk),
+    .setV(setTriggerV), 
+    .setV_1(setTriggerV_1), 
+    .setV_0(setTriggerV_0), 
+    .resetTrigV(resetTrigV),
     .I2Caddr(I2Caddr), 
     .I2Cdata(I2Cdata), 
     .I2Cbytes(I2Cbytes), 
@@ -170,7 +240,7 @@ DACControlFSM DAC (
     .I2CBusy(I2CBusy), 
     .I2CDataReady(I2CDataReady)
     );
-
+	 
 I2C_Comm I2C (
     .clk(clk), 
     .SDA(SDA), 
@@ -191,20 +261,23 @@ I2C_Comm I2C (
 //when this wire is low.
 //This wire is only high when the ADC has been powered and PWR_INT
 //is high
-wire OutToADCEnable, ADCSleep, ADCWake; 
+wire OutToADCEnable; 
 assign OutToADCEnable = (PWR_INT == 1 && ADC_PWR_EN == 1);
-assign ADCSleep = 0;
-assign ADCWake = 0;
-wire [3:0] ADC_State;
 
-ADC_FSM ADC_controller (
+wire ClkADC2DCM, ADCClock, ADCClockDelayed, ADCClockLocked;
+
+ADC_FSM ADC_fsm (
     .Clock(clk), 
     .Reset(1'b0), 
-    .Cmd(DataRxD), 
-	 .NewCmd(DataAvailable),
     .OutToADCEnable(OutToADCEnable), 
-    .Sleep(ADCSleep), 
-    .WakeUp(ADCWake), 
+    .adcPwrOn(adcPwrOn), 
+    .adcPwrOff(adcPwrOff), 
+    .adcSleep(adcSleep), 
+    .adcWake(adcWake), 
+    .adcRunCal(adcRunCal), 
+    .adcEnDes(adcEnDes), 
+    .adcDisDes(adcDisDes),
+	 .ADCClockLocked(ADCClockLocked),
     .ADCPower(ADC_PWR_EN), 
     .AnalogPower(ANALOG_PWR_EN), 
     .OutSclk(ADC_SCLK), 
@@ -213,14 +286,14 @@ ADC_FSM ADC_controller (
     .OutPD(ADC_PD), 
     .OutPDQ(ADC_PDQ), 
     .OutCal(ADC_CAL), 
-    .InCalRunning(ADC_CALRUN),
-	 .State(ADC_State)
+    .InCalRunning(ADC_CALRUN), 
+    .State(adcState)
     );
+
 
 //------------------------------------------------------------------------------
 // ADC Data Clock
 //------------------------------------------------------------------------------
-wire ClkADC2DCM, ADCClock, ADCClockDelayed, ADCClockLocked;
 // Create the ADC input clock buffer and send the signal to the DCM
 IBUFGDS #(
       .DIFF_TERM("TRUE"), 		// Differential Termination
@@ -240,11 +313,6 @@ ADC_Clk_Manager ADC_Clock
     // Status and control signals
     .RESET(1'b0),// IN
     .LOCKED(ADCClockLocked));      // OUT
-
-assign GPIO[1] = 0;
-assign GPIO[0] = ADC_State[2];	//Red;					//red
-assign GPIO[2] = ADC_State[0];		//(ADCClockLocked); //green
-assign GPIO[3] = ADC_State[1];		//(ClockLogic); //blue
 
 reg [1:0] InputClockOn = 2'b00;
 wire ClockLogic;
@@ -273,8 +341,8 @@ wire FifoNotFull;
 DataStorage Fifos (
     .DataIn(ADCRegDataOut), 
     .DataOut(StoredDataOut), 
-    .WriteStrobe(EchoChar),			//For now, store and transmit data when EchoChar set 
-    .ReadEnable(ReadEnable), 
+    .WriteStrobe(recordData || triggered),	//Data is recorded either with the serial command "X", or a trigger event
+    .ReadEnable(adcDataRead), 
     .WriteClock(ADCClock), 
     .WriteClockDelayed(ADCClockDelayed), 
     .ReadClock(clk), 

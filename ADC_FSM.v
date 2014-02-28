@@ -21,11 +21,16 @@
 module ADC_FSM(
     input Clock,
     input Reset,
-    input [7:0] Cmd,
-	 input NewCmd,
-	 input OutToADCEnable,
-	 input Sleep,
-	 input WakeUp,
+	 input OutToADCEnable,	//master control line to ensure proper power sequencing
+	 input adcPwrOn,	//control signal from FSM
+	 input adcPwrOff,	//control signal from FSM
+	 input adcSleep,	//control signal from FSM
+	 input adcWake,	//control signal from FSM
+	 input adcRunCal,	//control signal from FSM
+	 input adcEnDes,
+	 input adcDisDes,
+	 
+	 input ADCClockLocked, //logic high when the FPGA has locked onto clock signal
 	 
     output ADCPower,
 	 output AnalogPower,
@@ -83,7 +88,7 @@ module ADC_FSM(
 								//				|| CurrentState == DIS_DES_FOR_LOW_PWR_IDLE 
 								//				|| CurrentState == PERIPH_PWR_SHUTDOWN) : 1'bz;
 	assign OutPDQ = 1'b0;	//PDQ is always low for now
-	assign OutCal = (OutToADCEnable & (CurrentState != CALIBRATION_REQUEST)) ? 0 : 1'bz;
+	assign OutCal = (OutToADCEnable & (CurrentState != CALIBRATION_REQUEST)) ? 1'b0 : 1'bz;
 	
 	assign ADCPower = (CurrentState != ALL_PWR_OFF);
 	assign AnalogPower = (OutToADCEnable) ? 
@@ -106,24 +111,23 @@ module ADC_FSM(
 	always@(*) begin
 		NextState = CurrentState;
 		case (CurrentState)
-			ALL_PWR_OFF: if(NewCmd && (Cmd == "O")) NextState = ADC_PWR_WARMUP;
+			ALL_PWR_OFF: if(adcPwrOn) NextState = ADC_PWR_WARMUP;
 			ADC_PWR_WARMUP: if(TimerOut[8]) NextState = ANALOG_PWR_WARMUP;	//slightly delay the turn on of the peripheral power by ~1uS
-			ANALOG_PWR_WARMUP: if(TimerOut[23]) NextState = INIT_REG_WRITE; //Clock can take 10ms to stabilize
+			ANALOG_PWR_WARMUP: if(ADCClockLocked) NextState = INIT_REG_WRITE; //if(TimerOut[23]) NextState = INIT_REG_WRITE; //Clock can take 10ms to stabilize
 			INIT_REG_WRITE: if (RegWriteDone) NextState = INIT_ADC_WARMUP;
-			//Uncoment after testing calibration procedure INIT_ADC_WARMUP: if(TimerOut[7]) NextState = CALIBRATION_REQUEST;	//take out of PD mode and wait ~500ns
-			INIT_ADC_WARMUP: if(NewCmd && (Cmd == "C")) NextState = CALIBRATION_REQUEST;
+			INIT_ADC_WARMUP: if(TimerOut[7]) NextState = CALIBRATION_REQUEST;	//take out of PD mode and wait ~500ns - automatically do calibration after power on
 			CALIBRATION_REQUEST: if(InCalRunning) NextState = CALIBRATION;
-			CALIBRATION: if(~InCalRunning && NewCmd && (Cmd == "N")) NextState = ENABLE_DES;
+			CALIBRATION: if(~InCalRunning) NextState = ENABLE_DES; //&& adcEnDes
 			ENABLE_DES: if(RegWriteDone) NextState = DES_SAMPLING;
 			DES_SAMPLING: begin
-				if((NewCmd && (Cmd == "o")) || ~OutToADCEnable) NextState = PERIPH_PWR_SHUTDOWN;
-				else if ((NewCmd && (Cmd == "S")) || Sleep) NextState = DIS_DES_FOR_LOW_PWR_IDLE;
-				else if (NewCmd && (Cmd == "C")) NextState = DIS_DES_FOR_CAL;
+				if(adcPwrOff || ~OutToADCEnable) NextState = PERIPH_PWR_SHUTDOWN;
+				else if (adcSleep) NextState = DIS_DES_FOR_LOW_PWR_IDLE;
+				else if (adcRunCal) NextState = DIS_DES_FOR_CAL;
 			end
 			DIS_DES_FOR_LOW_PWR_IDLE: if(RegWriteDone) NextState = LOW_PWR_IDLE;
 			LOW_PWR_IDLE: begin
-				if((NewCmd && (Cmd == "o")) || ~OutToADCEnable) NextState = PERIPH_PWR_SHUTDOWN;
-				else if((NewCmd && (Cmd == "W")) || WakeUp) NextState = ADC_WAKEUP;
+				if(adcPwrOff || ~OutToADCEnable) NextState = PERIPH_PWR_SHUTDOWN;
+				else if(adcWake) NextState = ADC_WAKEUP;
 			end
 			ADC_WAKEUP: if(TimerOut[7]) NextState = ENABLE_DES; 	//~500ns
 			DIS_DES_FOR_CAL: if(RegWriteDone) NextState = CALIBRATION_REQUEST;
