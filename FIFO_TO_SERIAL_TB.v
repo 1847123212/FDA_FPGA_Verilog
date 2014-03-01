@@ -24,92 +24,82 @@
 
 module FIFO_TO_SERIAL_TB;
 
-	// Inputs
-	reg [7:0] DQ;
-	reg [7:0] DQD;
-	reg [7:0] DI;
-	reg [7:0] DID;
+	//inputs
+	reg [31:0] ADCRegDataOut;
+	reg fifoRecord;
+	reg ADCClock;
+	reg ADCClockDelayed;
+	reg clk;
+	reg txData;
+	reg txDataWr;
 
-	wire [31:0] DataIn;
-	wire WriteEnable;
-	wire ReadEnable;
-	reg DataBottom;
 	
-	reg WriteClock;
-	reg WriteClockDelayed;
-	reg ReadClock;
-	reg Reset;
-
-	// Outputs
+	//UUT connectors
+	wire [7:0] StoredDataOut;
+	wire adcDataRead;
 	wire DataValid;
 	wire FifoNotFull;
 	wire DataReadyToSend;
-	wire [1:0] Busy;
-	wire SDO;
-	wire [15:0] Data;
+	wire fifoState;
 
-	assign ReadEnable = ~Busy[1] & DataReadyToSend;
-	// Instantiate the Unit Under Test (UUT)
-	DataStorage uut1 (
-		.DataIn(DataIn), 
-		.DataOut(Data[15:8]), 
-		.WriteEnable(FifoNotFull), 
-		.ReadEnable(ReadEnable), 
-		.WriteClock(WriteClock), 
-		.WriteClockDelayed(WriteClockDelayed), 
-		.ReadClock(ReadClock), 
-		.Reset(Reset), 
-		.DataValid(DataValid), 
-		.FifoNotFull(FifoNotFull), 
-		.DataReadyToSend(DataReadyToSend)
-	);
-
-	TxDWrapper uut2 (
-		.Clock(ReadClock), 
-		.Reset(Reset), 
-		.Data(Data), 
-		.LatchData({DataValid, 1'b0}), 
-		.Busy(Busy), 
-		.SDO(SDO)
-	);
+	// Outputs
+	wire USB_RS232_TXD;
 	
-	assign Data[7:0] = DataBottom;
-	assign DataIn = {DI, DID, DQ, DQD};
-	assign WriteEnable = 1;
-	assign ReadEnable = ~Busy[1];
+	// Instantiate the Unit Under Test (UUT)
+	DataStorage UUT1 (
+    .DataIn(ADCRegDataOut), 
+    .DataOut(StoredDataOut), 
+    .WriteStrobe(fifoRecord),
+    .ReadEnable(adcDataRead), 
+    .WriteClock(ADCClock), 
+    .WriteClockDelayed(ADCClockDelayed), 
+    .ReadClock(clk), 
+    .Reset(1'b0), 
+    .DataValid(DataValid), 
+    .FifoNotFull(FifoNotFull), 
+    .DataReadyToSend(DataReadyToSend),
+	 .State(fifoState)
+    );
+
+	TxDWrapper UUT2 (
+		 .Clock(clk), 
+		 .Reset(1'b0), 
+		 .ADCData(StoredDataOut), 
+		 .generalData(txData), 
+		 .generalDataWrite(txDataWr), 
+		 .adcDataStreamingMode(DataReadyToSend),  //input equal to adc fifo not empty
+		 .adcDataValid(DataValid), 					//input to UART Start signal
+		 .adcDataStrobe(adcDataRead),					//output to adc FIFO 
+		 .SDO(USB_RS232_TXD)
+		 );
 	
 	initial begin
-		// Initialize Inputs
-//		WriteEnable = 0;
-		WriteClock = 0;
-		WriteClockDelayed = 0;
-		ReadClock = 0;
-		Reset = 0;
-		DQ = 8'd2;
-		DI = 8'd3;
-		DQD = 8'd0;
-		DID = 8'd1;
-		DataBottom = 8'b10101010;
-		
+		ADCRegDataOut = 32'd0;
+		fifoRecord = 0;
+		ADCClock = 1;
+		ADCClockDelayed = 1;
+		clk = 1;
+		txData = 0;
+		txDataWr =0;
 		// Wait 100 ns for global reset to finish
 		#100;
 		#500;	//FIFOS take a while 
-		
+		fifoRecord = 1;
 	end
       
 	always begin
-		#2 WriteClock = ~WriteClock;
-		WriteClockDelayed = WriteClock;
+		#2 ADCClock = ~ADCClock;
+			ADCClockDelayed = ADCClock;
 	end
 	
 	always
-		#5 ReadClock = ~ReadClock;
-
-	always@(posedge WriteClock) begin
-		DQ = DQ + 4;
-		DI = DI + 4;
-		DQD = DQD + 4;
-		DID = DID + 4;
+		#5 clk = ~clk;
+	
+	always begin
+		#4 ADCRegDataOut[31:24] = 8'b11111111; //ADCRegDataOut[31:24] + 1;
+			ADCRegDataOut[23:16] = 8'b10101010; //ADCRegDataOut[23:16] + 1;
+			ADCRegDataOut[15:8] = 8'b11001100; //ADCRegDataOut[15:8] + 1;
+			ADCRegDataOut[7:0] = 8'b11110000; //ADCRegDataOut[7:0] + 1;
 	end
+	
 endmodule
-

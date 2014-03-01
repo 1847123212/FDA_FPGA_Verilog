@@ -45,12 +45,14 @@ module ADC_FSM(
 	 output OutCal,
 	 input InCalRunning,
 	 
-	 output [3:0] State
+	 output [3:0] State,
+	 output OutDCMReset
     );
 
 	localparam 	ALL_PWR_OFF = 4'd0,
 					ADC_PWR_WARMUP = 4'd1,
 					ANALOG_PWR_WARMUP = 4'd2,
+					CLOCK_LOCK = 4'd14,
 					INIT_REG_WRITE = 4'd3,
 					INIT_ADC_WARMUP = 4'd4,
 					CALIBRATION_REQUEST = 4'd5,
@@ -75,7 +77,7 @@ module ADC_FSM(
 	assign State = CurrentState;
 	
 	wire TimerEnable, TimerClear;
-	wire [23:0] TimerOut;
+	wire [27:0] TimerOut;
 	
 	wire StartInit, StartDESEnable, StartDESDisable, RegWriteDone;
 	wire Sclk, Sdata, Select; 
@@ -84,9 +86,7 @@ module ADC_FSM(
 	assign OutSclk = (OutToADCEnable) ? Sclk : 1'bz;
 	assign OutSdata = (OutToADCEnable) ? Sdata : 1'bz;
 	assign OutSelect = (OutToADCEnable) ? Select : 1'bz;
-	assign OutPD = 1'b0; //(OutToADCEnable) ?   (CurrentState == LOW_PWR_IDLE 
-								//				|| CurrentState == DIS_DES_FOR_LOW_PWR_IDLE 
-								//				|| CurrentState == PERIPH_PWR_SHUTDOWN) : 1'bz;
+	assign OutPD = (OutToADCEnable) ?   (CurrentState == LOW_PWR_IDLE) : 1'bz;
 	assign OutPDQ = 1'b0;	//PDQ is always low for now
 	assign OutCal = (OutToADCEnable & (CurrentState != CALIBRATION_REQUEST)) ? 1'b0 : 1'bz;
 	
@@ -104,6 +104,7 @@ module ADC_FSM(
 	assign StartDESEnable = (CurrentState == ENABLE_DES);
 	assign StartDESDisable = ((CurrentState == DIS_DES_FOR_LOW_PWR_IDLE) || 
 											(CurrentState == DIS_DES_FOR_CAL));
+	assign OutDCMReset = (CurrentState == ALL_PWR_OFF || CurrentState == ADC_PWR_WARMUP || CurrentState == ANALOG_PWR_WARMUP);
 	
 	//------------------------------------------
 	//Conditional State Transition
@@ -113,7 +114,8 @@ module ADC_FSM(
 		case (CurrentState)
 			ALL_PWR_OFF: if(adcPwrOn) NextState = ADC_PWR_WARMUP;
 			ADC_PWR_WARMUP: if(TimerOut[8]) NextState = ANALOG_PWR_WARMUP;	//slightly delay the turn on of the peripheral power by ~1uS
-			ANALOG_PWR_WARMUP: if(ADCClockLocked) NextState = INIT_REG_WRITE; //if(TimerOut[23]) NextState = INIT_REG_WRITE; //Clock can take 10ms to stabilize
+			ANALOG_PWR_WARMUP: if(TimerOut[26]) NextState = CLOCK_LOCK; //Clock can take 10ms to stabilize
+			CLOCK_LOCK: if(ADCClockLocked) NextState = INIT_REG_WRITE;
 			INIT_REG_WRITE: if (RegWriteDone) NextState = INIT_ADC_WARMUP;
 			INIT_ADC_WARMUP: if(TimerOut[7]) NextState = CALIBRATION_REQUEST;	//take out of PD mode and wait ~500ns - automatically do calibration after power on
 			CALIBRATION_REQUEST: if(InCalRunning) NextState = CALIBRATION;
@@ -148,7 +150,7 @@ module ADC_FSM(
 	  .clk(Clock), // input clk
 	  .ce(TimerEnable), // input ce
 	  .sclr(TimerClear), // input sclr
-	  .q(TimerOut) // output [23 : 0] q
+	  .q(TimerOut) // output [27 : 0] q
 	);
 
 	//Module to generate serial output for the ADC

@@ -30,7 +30,6 @@ module TxDWrapper(
 	output SDO
    );
 
-
 	wire [7:0] TxData;
 	wire fifoRd, fifoFull, fifoEmpty, fifoValid;
 	wire [7:0] fifoOut;
@@ -39,8 +38,8 @@ module TxDWrapper(
 	assign fifoRd = adcDataStreamingMode ? 1'b0 : ((~fifoEmpty) && (~TxDBusy));
 	assign TxData = adcDataStreamingMode ?  ADCData : fifoOut;
 	assign TxDStart = adcDataStreamingMode ?  adcDataValid : fifoValid;
-	assign adcDataStrobe = adcDataStreamingMode ? ~TxDBusy : 1'b0;
-		
+	assign adcDataStrobe = adcDataStreamingMode ? ~TxDBusy &  ~adcDataValid: 1'b0;	
+				
 	async_transmitter txd (
 		 .clk(Clock), 
 		 .TxD_start(TxDStart), 

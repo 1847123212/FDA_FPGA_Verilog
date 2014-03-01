@@ -26,6 +26,8 @@ module Main_FSM(
     input NewCmd,
 	 input echoChar,
 	 input [3:0] adcState,
+	 input [1:0] fifoState,
+	 input adcClockLock,
 	 
 	 //output FSM control signals
 	 output echoOn,
@@ -45,6 +47,9 @@ module Main_FSM(
 	 output adcWake,
 	 output adcRunCal,
 	 output resetTrigV,
+	 output enAutoTrigReset,
+	 output disAutoTrigReset,
+	 output resetDCM,
 	 
 	 //uart output
 	 output reg [7:0] txData,
@@ -77,7 +82,15 @@ module Main_FSM(
 					RECORD_DATA = 18,
 					ERROR_IN2 = 19, 
 					RETURN_ADC_1 = 20,
-					RETURN_ADC_2 = 21;
+					RETURN_ADC_2 = 21,
+					FIFO_STATE1 = 22,
+					FIFO_STATE2 = 23, 
+					ENABLE_AUTO_TRIG_RESET = 24,
+					DISABLE_AUTO_TRIG_RESET = 25,
+					RESET_DCM1 = 26,
+					RESET_DCM2 = 27,
+					RETURN_CLOCK_LOCK1 = 28,
+					RETURN_CLOCK_LOCK2 = 29;
 	 
 	//Logic for FSM outputs 
 	assign echoOn = (State == ECHO_ON);
@@ -97,6 +110,9 @@ module Main_FSM(
 	assign adcDisDes = (State == ADC_DISABLE_DES);
 	assign triggerReset = (State == TRIGGER_RESET);
 	assign recordData = (State == RECORD_DATA);
+	assign enAutoTrigReset = (State == ENABLE_AUTO_TRIG_RESET);
+	assign disAutoTrigReset = (State == DISABLE_AUTO_TRIG_RESET);
+	assign resetDCM = (State == RESET_DCM1 || State == RESET_DCM2);
 	
 	
 	always@(posedge clk) begin
@@ -108,22 +124,37 @@ module Main_FSM(
 	 
 	 //Logic for UART output
 	 always@(posedge clk) begin
+		//Echo the received command when Echo is on
 		if(echoChar && NewCmd) begin
 			txData <= Cmd;
 			txDataWr <= 1'b1;
 		end
+		//Send ACK character
 		else if(State == COMMAND_ACK)begin
 			txData <= "*";
 			txDataWr <= 1'b1;
 		end
+		//Send an error character
 		else if(State == ERROR_IN2)begin
 			txData <= "!";
 			txDataWr <= 1'b1;
 		end
+		//Send the State of the ADC FSM
 		else if (State == RETURN_ADC_2)begin
 			txData <= adcState + 8'd48;
 			txDataWr <= 1'b1;
 		end
+		//Send the State of the FIFO FSM
+		else if (State == FIFO_STATE2)begin
+			txData <= fifoState + 8'd48;
+			txDataWr <= 1'b1;
+		end
+		//send the status of adc clock lock
+		else if (State == RETURN_CLOCK_LOCK2) begin
+			txData <= adcClockLock + 8'd48;
+			txDataWr <= 1'b1;
+		end
+		//Deassert the Tx Write signal
 		else begin
 			txData <= 8'b0;
 			txDataWr <= 1'b0;
@@ -145,18 +176,23 @@ module Main_FSM(
 				if(NewCmd)
 					case (Cmd)
 						"A": NextState = RETURN_ADC_1;
+						"B": NextState = ENABLE_AUTO_TRIG_RESET;
+						"b": NextState = DISABLE_AUTO_TRIG_RESET;						
 						"D": NextState = ADC_ENABLE_DES;
 						"d": NextState = ADC_DISABLE_DES;
 						"C": NextState = ADC_RUN_CAL;
 						"E": NextState = ECHO_ON;
 						"e": NextState = ECHO_OFF;
+						"F": NextState = FIFO_STATE1;
 						"O": NextState = ADC_PWR_ON;
 						"o": NextState = ADC_PWR_OFF;
-						//"R": global reset
+						"L": NextState = RETURN_CLOCK_LOCK1;
+						//"R": global reset of this FSM
+						"r": NextState = RESET_DCM1;
 						"S": NextState = ADC_SLEEP;
 						"T": NextState = TRIGGER_ON;
 						"t": NextState = TRIGGER_OFF;
-						"U": NextState = TRIGGER_RESET;
+						"U": NextState = TRIGGER_RESET;	//manually reset the trigger
 						"V": NextState = SET_TRIGGER_VOLTAGE;
 						"W": NextState = ADC_WAKE;	
 						"X": NextState = RECORD_DATA;
@@ -191,6 +227,14 @@ module Main_FSM(
 			RECORD_DATA: NextState = COMMAND_ACK;
 			RETURN_ADC_1: NextState = RETURN_ADC_2;
 			RETURN_ADC_2: NextState = IDLE;
+			FIFO_STATE1: NextState = FIFO_STATE2;
+			FIFO_STATE2: NextState = IDLE;
+			ENABLE_AUTO_TRIG_RESET: NextState = COMMAND_ACK;
+			DISABLE_AUTO_TRIG_RESET: NextState = COMMAND_ACK;
+			RESET_DCM1: NextState = RESET_DCM2;
+			RESET_DCM2: NextState = IDLE;
+			RETURN_CLOCK_LOCK1: NextState = RETURN_CLOCK_LOCK2;
+			RETURN_CLOCK_LOCK2: NextState = IDLE;
 			ERROR_IN1: NextState = ERROR_IN2;
 			ERROR_IN2: NextState = IDLE;						//Need two error states, because the FSM is transmitting hte received character during the first one
 			COMMAND_ACK: NextState = IDLE;

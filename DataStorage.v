@@ -29,7 +29,8 @@ module DataStorage(
     input Reset,
     output DataValid,
     output FifoNotFull,
-    output DataReadyToSend
+    output DataReadyToSend,
+	 output [1:0] State
     );
 
 wire FifoReadEn;
@@ -53,6 +54,8 @@ localparam 	READY_TO_STORE = 2'b00,
 
 reg [1:0] CurrentState = SENDING_DATA;
 reg [1:0] NextState = SENDING_DATA;
+
+assign State = CurrentState;
 
 reg [1:0] WriteEnableEdge = 2'b00;
 assign WriteEnable = (CurrentState == STORING_DATA);

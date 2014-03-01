@@ -75,6 +75,8 @@ module FDA_top(
   
   assign clk_enable = 1'b1;
 
+	wire ClkADC2DCM, ADCClock, ADCClockDelayed, ADCClockLocked;
+
   DCM_SP DCM_SP_INST(
     .CLKIN(CLK_100MHZ),
     .CLKFB(clk),
@@ -113,6 +115,7 @@ wire [7:0] StoredDataOut;
 	wire OtherDataLatch;
 	wire ArmTrigger, TriggerReset, EchoChar;
 	wire FIFOTransmitBusy;
+	wire adcDataRead, DataReadyToSend;
 	
 	assign ClearData = 1'b0;
 	
@@ -140,6 +143,7 @@ wire [7:0] StoredDataOut;
 
 wire recordData, adcPwrOn;
 wire [3:0] adcState;
+wire [1:0] fifoState;
 
 //Main FSM for handling UART I/O
 Main_FSM SystemFSM (
@@ -147,6 +151,8 @@ Main_FSM SystemFSM (
     .Cmd(Cmd), 
     .NewCmd(NewCmd), 
 	 .adcState(adcState),
+	 .fifoState(fifoState),
+	 .adcClockLock(ADCClockLocked),
     .echoChar(echoChar), 
     .echoOn(echoOn), 
     .echoOff(echoOff), 
@@ -164,7 +170,10 @@ Main_FSM SystemFSM (
     .setTriggerV_0(setTriggerV_0), 
     .adcWake(adcWake), 
     .adcRunCal(adcRunCal), 
-    .resetTrigV(resetTrigV), 
+    .resetTrigV(resetTrigV),
+	 .enAutoTrigReset(enAutoTrigReset),
+	 .disAutoTrigReset(disAutoTrigReset),
+	 .resetDCM(resetDCM),
     .txData(txData), 
     .txDataWr(txDataWr)
     );
@@ -180,12 +189,21 @@ SystemSetting EchoSetting (
     );
 
 wire triggerArmed;
-SystemSetting TriggerArm (
+SystemSetting TriggerArmSetting (
     .clk(clk), 
     .turnOn(triggerOn), 
     .turnOff(triggerOff), 
     .toggle(1'b0), 
     .out(triggerArmed)
+    );
+	 
+wire autoTriggerReset;
+SystemSetting TriggerAutoResetSetting (
+    .clk(clk), 
+    .turnOn(enAutoTrigReset), 
+    .turnOff(disAutoTrigReset), 
+    .toggle(1'b0), 
+    .out(autoTriggerReset)
     );
 	 
 wire Red, Green, Blue;
@@ -194,24 +212,36 @@ wire Red, Green, Blue;
 // Trigger
 //------------------------------------------------------------------------------
 wire triggered;
+reg [3:0] fifoStateChange = 4'b0;
+wire allowArmed, t_reset;
+assign allowArmed = (fifoStateChange == 4'b0);
+assign t_reset = autoTriggerReset && (fifoStateChange == 4'b1000);	//if auto trigger reset is enabled, reset when the fifo
+																						//state changes from Sending Data to Ready
+
+always@(posedge clk) begin
+	fifoStateChange[3:0] <= {fifoStateChange[1:0], fifoState[1:0]};
+end
+
+
+
 TriggerControl TriggerController (
     .clk(clk), 
     .t_p(DATA_TRIGGER_P), 
     .t_n(DATA_TRIGGER_N), 
-    .armed(triggerArmed),				 
-    .t_reset(triggerReset),
+    .armed(triggerArmed && allowArmed),	//trigger is de-armed when storing or sending data				 
+    .t_reset(triggerReset || t_reset),		//reset the trigger manually or automatically
     .triggered(triggered), 	
     .comp_reset_high(TRIGGER_RST_P), 
     .comp_reset_low(TRIGGER_RST_N)
     );
 	 
 //------------------------------------------------------------------------------
-// GPIO
+// GPIO - The LEDs are inverted - so 0 is on, 1 is off
 //------------------------------------------------------------------------------
 assign GPIO[1] = 0;
 assign GPIO[0] = ADCClockLocked;		//Red;					//red
-assign GPIO[2] =	~triggerArmed;		//(ADCClockLocked); 	//green
-assign GPIO[3] =  ~triggered;			//(ClockLogic); 			//blue
+assign GPIO[2] = ~triggerArmed;		//(ADCClockLocked); 	//green
+assign GPIO[3] = ~triggered;			//(ClockLogic); 			//blue
 
 //------------------------------------------------------------------------------
 // I2C Communication and Devices
@@ -219,12 +249,6 @@ assign GPIO[3] =  ~triggered;			//(ClockLogic); 			//blue
 wire [6:0] I2Caddr;
 wire [15:0] I2Cdata;
 wire I2Cbytes, I2Cr_w, I2C_load, I2CBusy, I2CDataReady;
-
-/**
-    .setTriggerV(setTriggerV), 
-    .setTriggerV_1(setTriggerV_1), 
-    .setTriggerV_0(setTriggerV_0), 
-**/
 
 DACControlFSM DAC (
     .clk(clk),
@@ -264,7 +288,6 @@ I2C_Comm I2C (
 wire OutToADCEnable; 
 assign OutToADCEnable = (PWR_INT == 1 && ADC_PWR_EN == 1);
 
-wire ClkADC2DCM, ADCClock, ADCClockDelayed, ADCClockLocked;
 
 ADC_FSM ADC_fsm (
     .Clock(clk), 
@@ -287,6 +310,7 @@ ADC_FSM ADC_fsm (
     .OutPDQ(ADC_PDQ), 
     .OutCal(ADC_CAL), 
     .InCalRunning(ADC_CALRUN), 
+	 .OutDCMReset(OutDCMReset),
     .State(adcState)
     );
 
@@ -295,6 +319,7 @@ ADC_FSM ADC_fsm (
 // ADC Data Clock
 //------------------------------------------------------------------------------
 // Create the ADC input clock buffer and send the signal to the DCM
+
 IBUFGDS #(
       .DIFF_TERM("TRUE"), 		// Differential Termination
       .IOSTANDARD("LVDS_33") 	// Specifies the I/O standard for this buffer
@@ -311,7 +336,7 @@ ADC_Clk_Manager ADC_Clock
     .CLK_OUT1(ADCClock),     // OUT
     .CLK_OUT2(ADCClockDelayed),     // OUT
     // Status and control signals
-    .RESET(1'b0),// IN
+    .RESET(OutDCMReset || resetDCM),// IN
     .LOCKED(ADCClockLocked));      // OUT
 
 reg [1:0] InputClockOn = 2'b00;
@@ -336,12 +361,17 @@ ADCDataInput ADC_Data_Capture (
 //------------------------------------------------------------------------------
 // Data FIFOs 
 //------------------------------------------------------------------------------
-wire FifoNotFull; 
+wire FifoNotFull;
+wire fifoRecord;
+
+// Data is recorded either with the serial command "X", or a trigger event
+// and only when there is a lock on the ADC clock
+assign fifoRecord = ADCClockLocked & (recordData || triggered);
 
 DataStorage Fifos (
     .DataIn(ADCRegDataOut), 
     .DataOut(StoredDataOut), 
-    .WriteStrobe(recordData || triggered),	//Data is recorded either with the serial command "X", or a trigger event
+    .WriteStrobe(fifoRecord),
     .ReadEnable(adcDataRead), 
     .WriteClock(ADCClock), 
     .WriteClockDelayed(ADCClockDelayed), 
@@ -349,7 +379,8 @@ DataStorage Fifos (
     .Reset(1'b0), 
     .DataValid(DataValid), 
     .FifoNotFull(FifoNotFull), 
-    .DataReadyToSend(DataReadyToSend)
+    .DataReadyToSend(DataReadyToSend),
+	 .State(fifoState)
     );
 
 endmodule
