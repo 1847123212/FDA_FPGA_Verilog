@@ -31,7 +31,7 @@ module DataStorage(
     output FifoNotFull,
     output DataReadyToSend,
 	 output [1:0] State
-    );
+    ); 
 
 wire FifoReadEn;
 wire SideFull, TopFull, BottomFull; 
@@ -128,13 +128,20 @@ FIFO_10bit FIFO_Top_Inputs (
 
 wire ConverterAlmostFull;
 assign FifoReadEn = (~ConverterAlmostFull &&  ~FifosEmpty);	// Read from FIFOs when the converter is not full and the FIFOs are not empty
+reg [31:0] FirstWord = 32'b11111111100000000111111100000000;
+wire [31:0] dwcInput;
+wire dwcWrEn;
+
+//These assignments should mean that the first 4 bytes are the signature "FirstWord" to denote the start of data transfer
+assign dwcInput = (WriteEnableEdge == 2'b01) ? FirstWord : FifoDataOut[31:0];
+assign dwcWrEn =  (WriteEnableEdge == 2'b01) ? 1'b1 : FifosValid;
 
 FIFO_32to8 DataWidthConverter (
   .rst(Reset), // input rst
   .wr_clk(ReadClock), // input wr_clk
   .rd_clk(ReadClock), // input rd_clk
-  .din(FifoDataOut[31:0]), // input [31 : 0] din
-  .wr_en(FifosValid), // input wr_en
+  .din(dwcInput), // input [31 : 0] din
+  .wr_en(dwcWrEn), // input wr_en
   .rd_en(ReadEnable), // input rd_en
   .dout(DataOut), // output [7 : 0] dout
   .full(ConverterFull), // output full

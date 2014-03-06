@@ -77,7 +77,7 @@ module ADC_FSM(
 	assign State = CurrentState;
 	
 	wire TimerEnable, TimerClear;
-	wire [27:0] TimerOut;
+	wire [26:0] TimerOut;
 	
 	wire StartInit, StartDESEnable, StartDESDisable, RegWriteDone;
 	wire Sclk, Sdata, Select; 
