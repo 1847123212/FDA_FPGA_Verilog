@@ -77,30 +77,31 @@ module FDA_top(
 
 	wire ClkADC2DCM, ADCClock, ADCClockDelayed, ADCClockLocked;
 
-  DCM_SP DCM_SP_INST(
-    .CLKIN(CLK_100MHZ),
-    .CLKFB(clk),
-    .RST(1'b0),
-    .PSEN(1'b0),
-    .PSINCDEC(1'b0),
-    .PSCLK(1'b0),
-    .DSSEN(1'b0),
-    .CLK0(clknub),
-    .CLK90(),
-    .CLK180(),
-    .CLK270(),
-    .CLKDV(),
-    .CLK2X(),
-    .CLK2X180(),
-    .CLKFX(),
-    .CLKFX180(),
-    .STATUS(),
-    .LOCKED(),
-    .PSDONE());
-  defparam DCM_SP_INST.CLKIN_DIVIDE_BY_2 = "FALSE";
-  defparam DCM_SP_INST.CLKIN_PERIOD = 10.000;
 
-  BUFGCE  BG (.O(clk), .CE(clk_enable), .I(clknub));
+//  DCM_SP DCM_SP_INST(
+//    .CLKIN(CLK_100MHZ),
+//    .CLKFB(clk),
+//    .RST(1'b0),
+//    .PSEN(1'b0),
+//    .PSINCDEC(1'b0),
+//    .PSCLK(1'b0),
+//    .DSSEN(1'b0),
+//    .CLK0(clknub),
+//    .CLK90(),
+//    .CLK180(),
+//    .CLK270(),
+//    .CLKDV(),
+//    .CLK2X(),
+//    .CLK2X180(),
+//    .CLKFX(),
+//    .CLKFX180(),
+//    .STATUS(),
+//    .LOCKED(),
+//    .PSDONE());
+//  defparam DCM_SP_INST.CLKIN_DIVIDE_BY_2 = "FALSE";
+//  defparam DCM_SP_INST.CLKIN_PERIOD = 10.000;
+//
+//  BUFGCE  BG (.O(clk), .CE(clk_enable), .I(clknub));
   
 //------------------------------------------------------------------------------
 // UART and device settings/state machines 
@@ -235,13 +236,6 @@ TriggerControl TriggerController (
     .comp_reset_low(TRIGGER_RST_N)
     );
 	 
-//------------------------------------------------------------------------------
-// GPIO - The LEDs are inverted - so 0 is on, 1 is off
-//------------------------------------------------------------------------------
-assign GPIO[1] = 0;
-assign GPIO[0] = ADCClockLocked;		//Red;					//red
-assign GPIO[2] = ~triggerArmed;		//(ADCClockLocked); 	//green
-assign GPIO[3] = ~triggered;			//(ClockLogic); 			//blue
 
 //------------------------------------------------------------------------------
 // I2C Communication and Devices
@@ -329,7 +323,11 @@ IBUFGDS #(
       .IB(ADC_CLK_N) 			// Diff_n clock buffer input
    );
 	
-ADC_Clk_Manager ADC_Clock
+
+wire adcPllReset;	//Keep pll in reset state until clock is ready
+wire ClockLogic;
+
+Clock250Buffer adc_clock_buffer
    (// Clock in ports
     .CLK_IN1(ClkADC2DCM),      // IN
     // Clock out ports
@@ -337,13 +335,24 @@ ADC_Clk_Manager ADC_Clock
     .CLK_OUT2(ADCClockDelayed),     // OUT
     // Status and control signals
     .RESET(OutDCMReset || resetDCM),// IN
-    .LOCKED(ADCClockLocked));      // OUT
+    .LOCKED(ADCClockLocked));      // OUT	
 
-reg [1:0] InputClockOn = 2'b00;
-wire ClockLogic;
-assign ClockLogic = (InputClockOn[1] != InputClockOn[0]); 
-always@(posedge ADCClock) begin
-	InputClockOn <= {InputClockOn[0], ClkADC2DCM};
+wire testRESET, testLOCKED, clk250mhz;
+
+ClockTest mainClk
+   (// Clock in ports
+    .CLK_IN1(CLK_100MHZ),      // IN
+    // Clock out ports
+    .CLK_OUT1(clk),     // OUT
+    .CLK_OUT2(clk250mhz),     // OUT
+    // Status and control signals
+    .RESET(1'b0),// IN
+    .LOCKED(testLOCKED));
+
+reg [15:0] InputClockOn = 16'b0000;
+assign ClockLogic = (InputClockOn != 16'hFFFF ) && (InputClockOn != 16'b0); 
+always@(posedge clk250mhz) begin
+	InputClockOn <= {InputClockOn[14:0], ClkADC2DCM};
 end
 
 //------------------------------------------------------------------------------
@@ -368,13 +377,36 @@ wire fifoRecord;
 // and only when there is a lock on the ADC clock
 assign fifoRecord = ADCClockLocked & (recordData || triggered);
 
+
+//Test debugging code
+reg [7:0] DI = 8'b0;
+reg [7:0] DId = 8'b0;
+reg [7:0] DQ = 8'b0;
+reg [7:0] DQd = 8'b0;
+
+always @(posedge ClkADC2DCM) begin
+	//DI[0] <= ClkADC2DCM;
+	if(fifoRecord) begin
+		DI <= 8'b0;
+		DId <= 8'b0;
+		DQ <= 8'b0;
+		DQd <= 8'b0;
+	end 
+	else begin
+		DI <= DI + 1;
+		DId <= DId + 1;
+		DQ <= DQ + 1;
+		DQd <= DQd + 1;
+	end
+end
+
 DataStorage Fifos (
-    .DataIn(ADCRegDataOut), 
+    .DataIn({DQd, DQ, DId, DI}),//.DataIn(ADCRegDataOut), 
     .DataOut(StoredDataOut), 
     .WriteStrobe(fifoRecord),
     .ReadEnable(adcDataRead), 
-    .WriteClock(ADCClock), 
-    .WriteClockDelayed(ADCClockDelayed), 
+    .WriteClock(clk250mhz), //ClkADC2DCM
+    .WriteClockDelayed(clk250mhz), //ADCClockDelayed
     .ReadClock(clk), 
     .Reset(1'b0), 
     .DataValid(DataValid), 
@@ -382,5 +414,13 @@ DataStorage Fifos (
     .DataReadyToSend(DataReadyToSend),
 	 .State(fifoState)
     );
+
+//------------------------------------------------------------------------------
+// GPIO - The LEDs are inverted - so 0 is on, 1 is off
+//------------------------------------------------------------------------------
+assign GPIO[1] = 1'b0; //ClkADC2DCM;
+assign GPIO[0] = ADCClockLocked;		//red
+assign GPIO[2] = testLOCKED; 			//green
+assign GPIO[3] = ClockLogic;			//blue
 
 endmodule

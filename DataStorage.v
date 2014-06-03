@@ -42,8 +42,7 @@ wire [31:0] FifoDataOut;	//This data is in chronological order: [31:25] is DQD (
 wire ConverterWriteEn, ConverterFull, ConverterEmpty, ConverterValid;
 wire FifosValid = (SideValid && TopValid && BottomValid);
 wire FifosEmpty = (SideEmpty && TopEmpty && BottomEmpty);
-wire FifosFull = (SideFull || TopFull || BottomFull);
-
+wire FifosFull = (SideFull || TopFull || BottomFull);	
 reg StoringData;
 assign FifoNotFull = (~CurrentState[1]);
 assign DataReadyToSend = ~ConverterEmpty;
@@ -86,6 +85,7 @@ always@(*) begin
 		end
 	endcase
 end
+
 
 FIFO_11bit FIFO_Side_Inputs (
   .rst(Reset), // input rst

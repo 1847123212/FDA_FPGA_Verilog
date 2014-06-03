@@ -55,8 +55,8 @@
 // "Output    Output      Phase     Duty      Pk-to-Pk        Phase"
 // "Clock    Freq (MHz) (degrees) Cycle (%) Jitter (ps)  Error (ps)"
 //----------------------------------------------------------------------------
-// CLK_OUT1___250.000____101.250______50.0______131.387____155.539
-// CLK_OUT2___250.000____135.000______50.0______131.387____155.539
+// CLK_OUT1___250.000______0.000______50.0______126.734____211.174
+// no_CLK_OUT2_output
 //
 //----------------------------------------------------------------------------
 // "Input Clock   Freq (MHz)    Input Jitter (UI)"
@@ -65,7 +65,7 @@
 
 `timescale 1ps/1ps
 
-(* CORE_GENERATION_INFO = "ADC_Clk_Manager,clk_wiz_v3_6,{component_name=ADC_Clk_Manager,use_phase_alignment=true,use_min_o_jitter=true,use_max_i_jitter=false,use_dyn_phase_shift=false,use_inclk_switchover=false,use_dyn_reconfig=false,feedback_source=FDBK_AUTO,primtype_sel=PLL_BASE,num_out_clk=2,clkin1_period=4.000,clkin2_period=4.000,use_power_down=false,use_reset=true,use_locked=true,use_inclk_stopped=false,use_status=false,use_freeze=false,use_clk_valid=false,feedback_type=SINGLE,clock_mgr_type=AUTO,manual_override=false}" *)
+(* CORE_GENERATION_INFO = "ADC_Clk_Manager,clk_wiz_v3_6,{component_name=ADC_Clk_Manager,use_phase_alignment=true,use_min_o_jitter=false,use_max_i_jitter=false,use_dyn_phase_shift=false,use_inclk_switchover=false,use_dyn_reconfig=false,feedback_source=FDBK_AUTO,primtype_sel=PLL_BASE,num_out_clk=2,clkin1_period=4.000,clkin2_period=4.000,use_power_down=false,use_reset=true,use_locked=true,use_inclk_stopped=false,use_status=false,use_freeze=false,use_clk_valid=false,feedback_type=SINGLE,clock_mgr_type=MANUAL,manual_override=false}" *)
 module ADC_Clk_Manager
  (// Clock in ports
   input         CLK_IN1,
@@ -99,17 +99,17 @@ module ADC_Clk_Manager
   wire        clkout5_unused;
 
   PLL_BASE
-  #(.BANDWIDTH              ("HIGH"),
+  #(.BANDWIDTH              ("OPTIMIZED"),
     .CLK_FEEDBACK           ("CLKFBOUT"),
     .COMPENSATION           ("SYSTEM_SYNCHRONOUS"),
     .DIVCLK_DIVIDE          (1),
-    .CLKFBOUT_MULT          (4),
+    .CLKFBOUT_MULT          (2),
     .CLKFBOUT_PHASE         (0.000),
-    .CLKOUT0_DIVIDE         (4),
-    .CLKOUT0_PHASE          (101.250),
+    .CLKOUT0_DIVIDE         (2),
+    .CLKOUT0_PHASE          (0.000),
     .CLKOUT0_DUTY_CYCLE     (0.500),
-    .CLKOUT1_DIVIDE         (4),
-    .CLKOUT1_PHASE          (135.000),
+    .CLKOUT1_DIVIDE         (1),
+    .CLKOUT1_PHASE          (0.000),
     .CLKOUT1_DUTY_CYCLE     (0.500),
     .CLKIN_PERIOD           (4.000),
     .REF_JITTER             (0.009))
