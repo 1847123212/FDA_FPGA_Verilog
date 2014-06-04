@@ -42,22 +42,24 @@ module FIFO_TB;
 	wire DataValid;
 	wire FifoNotFull;
 	wire DataReadyToSend;
+	wire [1:0] State;
 
 	// Instantiate the Unit Under Test (UUT)
 	DataStorage uut (
 		.DataIn(DataIn), 
 		.DataOut(DataOut), 
-		.WriteEnable(FifoNotFull), 
+		.WriteStrobe(FifoNotFull), 
 		.ReadEnable(ReadEnable), 
 		.WriteClock(WriteClock), 
 		.WriteClockDelayed(WriteClockDelayed), 
 		.ReadClock(ReadClock), 
 		.Reset(Reset), 
-		.DataValid(DataValid), 
+		.DataValid(DataValid),
 		.FifoNotFull(FifoNotFull), 
-		.DataReadyToSend(DataReadyToSend)
+		.DataReadyToSend(DataReadyToSend),
+		.State(State)
 	);
-
+	
 	assign DataIn = {DI, DID, DQ, DQD};
 	assign WriteEnable = 1;
 	
@@ -77,6 +79,8 @@ module FIFO_TB;
 		// Wait 100 ns for global reset to finish
 		#100;
 		#500;	//FIFOS take a while 
+		Reset = 1;
+		#4 Reset = 0;
 		
 	end
       

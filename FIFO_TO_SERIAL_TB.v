@@ -95,7 +95,7 @@ module FIFO_TO_SERIAL_TB;
 	always
 		#5 clk = ~clk;
 	
-	always@(posedge 
+	always@(posedge clk) begin
 		#4 ADCRegDataOut[31:24] = 8'b00110010; //ADCRegDataOut[31:24] + 1;
 			ADCRegDataOut[23:16] = 8'b10101010; //ADCRegDataOut[23:16] + 1;
 			ADCRegDataOut[15:8] = 8'b11001100; //ADCRegDataOut[15:8] + 1;

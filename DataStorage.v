@@ -34,22 +34,21 @@ module DataStorage(
     ); 
 
 wire FifoReadEn;
-wire SideFull, TopFull, BottomFull; 
-wire SideEmpty, TopEmpty, BottomEmpty;
-wire SideValid, TopValid, BottomValid;
+wire fullDI, emptyDI, validDI, fullDID, emptyDID, validDID, fullDQ, emptyDQ, validDQ, fullDQD, emptyDQD, validDQD;
 wire [31:0] FifoDataOut;	//This data is in chronological order: [31:25] is DQD (oldest), 
 									// [24:16] is DID, [8:15] is DQ, [7:0] is DI 
 wire ConverterWriteEn, ConverterFull, ConverterEmpty, ConverterValid;
-wire FifosValid = (SideValid && TopValid && BottomValid);
-wire FifosEmpty = (SideEmpty && TopEmpty && BottomEmpty);
-wire FifosFull = (SideFull || TopFull || BottomFull);	
+wire FifosValid = (validDI & validDID & validDQ & validDQD);
+wire FifosEmpty = (emptyDI | emptyDID | emptyDQ | emptyDQD);
+wire FifosFull = (fullDI | fullDID | fullDQ | fullDQD);	
 reg StoringData;
 assign FifoNotFull = (~CurrentState[1]);
 assign DataReadyToSend = ~ConverterEmpty;
 
 localparam 	READY_TO_STORE = 2'b00,
 				STORING_DATA = 2'b01,
-				SENDING_DATA = 2'b10;
+				SENDING_DATA = 2'b10,
+				RESET = 2'b11;
 
 reg [1:0] CurrentState = SENDING_DATA;
 reg [1:0] NextState = SENDING_DATA;
@@ -81,12 +80,101 @@ always@(*) begin
 			if(FifosFull) NextState = SENDING_DATA;
 		end
 		SENDING_DATA:begin
-			if(ConverterEmpty) NextState = READY_TO_STORE;
+			if(ConverterEmpty) NextState = RESET;
+		end
+		RESET: begin
+			NextState = READY_TO_STORE;
 		end
 	endcase
 end
 
+//FifoDataOut data is in chronological order: [31:25] is DQD (oldest), 
+// [24:16] is DID, [8:15] is DQ, [7:0] is DI 
 
+//The input is in the order 
+//DI, DID, DQ, DQD
+wire fifoReset;
+assign fifoReset = (CurrentState == RESET) | Reset;
+
+Fifi_8_bit DI_Fifo (
+  .rst(fifoReset), // input rst
+  .wr_clk(WriteClock), // input wr_clk
+  .rd_clk(ReadClock), // input rd_clk
+  .din(DataIn[31:24]), // input [7 : 0] din
+  .wr_en(WriteEnable), // input wr_en
+  .rd_en(FifoReadEn), // input rd_en
+  .dout(FifoDataOut[7:0]), // output [7 : 0] dout
+  .full(fullDI), // output full
+  .empty(emptyDI), // output empty
+  .valid(validDI) // output valid
+);
+
+Fifi_8_bit DID_Fifo (
+  .rst(fifoReset), // input rst
+  .wr_clk(WriteClock), // input wr_clk
+  .rd_clk(ReadClock), // input rd_clk
+  .din(DataIn[23:16]), // input [7 : 0] din
+  .wr_en(WriteEnable), // input wr_en
+  .rd_en(FifoReadEn), // input rd_en
+  .dout(FifoDataOut[23:16]), // output [7 : 0] dout
+  .full(fullDID), // output full
+  .empty(emptyDID), // output empty
+  .valid(validDID) // output valid
+);
+
+Fifi_8_bit DQ_Fifo (
+  .rst(fifoReset), // input rst
+  .wr_clk(WriteClock), // input wr_clk
+  .rd_clk(ReadClock), // input rd_clk
+  .din(DataIn[15:8]), // input [7 : 0] din
+  .wr_en(WriteEnable), // input wr_en
+  .rd_en(FifoReadEn), // input rd_en
+  .dout(FifoDataOut[15:8]), // output [7 : 0] dout
+  .full(fullDQ), // output full
+  .empty(emptyDQ), // output empty
+  .valid(validDQ) // output valid
+);
+
+Fifi_8_bit DQD_Fifo (
+  .rst(fifoReset), // input rst
+  .wr_clk(WriteClock), // input wr_clk
+  .rd_clk(ReadClock), // input rd_clk
+  .din(DataIn[7:0]), // input [7 : 0] din
+  .wr_en(WriteEnable), // input wr_en
+  .rd_en(FifoReadEn), // input rd_en
+  .dout(FifoDataOut[31:24]), // output [7 : 0] dout
+  .full(fullDQD), // output full
+  .empty(emptyDQD), // output empty
+  .valid(validDQD) // output valid
+);
+
+wire ConverterAlmostFull;
+assign FifoReadEn = (~ConverterAlmostFull &  ~FifosEmpty);	// Read from FIFOs when the converter is not full and the FIFOs are not empty
+reg [31:0] FirstWord = 32'b11111111100000000111111100000000;
+wire [31:0] dwcInput;
+wire dwcWrEn;
+
+//These assignments should mean that the first 4 bytes are the signature "FirstWord" to denote the start of data transfer
+assign dwcInput = (WriteEnableEdge == 2'b01) ? FirstWord : FifoDataOut[31:0];
+assign dwcWrEn =  (WriteEnableEdge == 2'b01) ? 1'b1 : FifosValid;
+
+FIFO_32to8 DataWidthConverter (
+  .rst(fifoReset), // input rst
+  .wr_clk(ReadClock), // input wr_clk
+  .rd_clk(ReadClock), // input rd_clk
+  .din(dwcInput), // input [31 : 0] din
+  .wr_en(dwcWrEn), // input wr_en
+  .rd_en(ReadEnable), // input rd_en
+  .dout(DataOut), // output [7 : 0] dout
+  .full(ConverterFull), // output full
+  .almost_full(ConverterAlmostFull),
+  .empty(ConverterEmpty), // output empty
+  .valid(DataValid) // output valid
+);
+
+endmodule
+
+/**
 FIFO_11bit FIFO_Side_Inputs (
   .rst(Reset), // input rst
   .wr_clk(WriteClock), // input wr_clk
@@ -125,29 +213,4 @@ FIFO_10bit FIFO_Top_Inputs (
   .empty(TopEmpty), // output empty
   .valid(TopValid) // output valid
 );
-
-wire ConverterAlmostFull;
-assign FifoReadEn = (~ConverterAlmostFull &&  ~FifosEmpty);	// Read from FIFOs when the converter is not full and the FIFOs are not empty
-reg [31:0] FirstWord = 32'b11111111100000000111111100000000;
-wire [31:0] dwcInput;
-wire dwcWrEn;
-
-//These assignments should mean that the first 4 bytes are the signature "FirstWord" to denote the start of data transfer
-assign dwcInput = (WriteEnableEdge == 2'b01) ? FirstWord : FifoDataOut[31:0];
-assign dwcWrEn =  (WriteEnableEdge == 2'b01) ? 1'b1 : FifosValid;
-
-FIFO_32to8 DataWidthConverter (
-  .rst(Reset), // input rst
-  .wr_clk(ReadClock), // input wr_clk
-  .rd_clk(ReadClock), // input rd_clk
-  .din(dwcInput), // input [31 : 0] din
-  .wr_en(dwcWrEn), // input wr_en
-  .rd_en(ReadEnable), // input rd_en
-  .dout(DataOut), // output [7 : 0] dout
-  .full(ConverterFull), // output full
-  .almost_full(ConverterAlmostFull),
-  .empty(ConverterEmpty), // output empty
-  .valid(DataValid) // output valid
-);
-
-endmodule
+**/

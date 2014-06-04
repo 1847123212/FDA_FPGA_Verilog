@@ -75,8 +75,7 @@ module FDA_top(
   
   assign clk_enable = 1'b1;
 
-	wire ClkADC2DCM, ADCClock, ADCClockDelayed, ADCClockLocked;
-
+  wire ClkADC2DCM, ADCClock, ADCClockDelayed, ADCClockOn;
 
 //  DCM_SP DCM_SP_INST(
 //    .CLKIN(CLK_100MHZ),
@@ -153,7 +152,7 @@ Main_FSM SystemFSM (
     .NewCmd(NewCmd), 
 	 .adcState(adcState),
 	 .fifoState(fifoState),
-	 .adcClockLock(ADCClockLocked),
+	 .adcClockLock(ADCClockOn),
     .echoChar(echoChar), 
     .echoOn(echoOn), 
     .echoOff(echoOff), 
@@ -216,26 +215,23 @@ wire triggered;
 reg [3:0] fifoStateChange = 4'b0;
 wire allowArmed, t_reset;
 assign allowArmed = (fifoStateChange == 4'b0);
-assign t_reset = autoTriggerReset && (fifoStateChange == 4'b1000);	//if auto trigger reset is enabled, reset when the fifo
+assign t_reset = autoTriggerReset & (fifoStateChange == 4'b1000);	//if auto trigger reset is enabled, reset when the fifo
 																						//state changes from Sending Data to Ready
 
 always@(posedge clk) begin
 	fifoStateChange[3:0] <= {fifoStateChange[1:0], fifoState[1:0]};
 end
 
-
-
 TriggerControl TriggerController (
     .clk(clk), 
     .t_p(DATA_TRIGGER_P), 
     .t_n(DATA_TRIGGER_N), 
-    .armed(triggerArmed && allowArmed),	//trigger is de-armed when storing or sending data				 
-    .t_reset(triggerReset || t_reset),		//reset the trigger manually or automatically
+    .armed(triggerArmed & allowArmed),	//trigger is de-armed when storing or sending data				 
+    .t_reset(triggerReset | t_reset),		//reset the trigger manually or automatically
     .triggered(triggered), 	
     .comp_reset_high(TRIGGER_RST_P), 
     .comp_reset_low(TRIGGER_RST_N)
     );
-	 
 
 //------------------------------------------------------------------------------
 // I2C Communication and Devices
@@ -280,7 +276,7 @@ I2C_Comm I2C (
 //This wire is only high when the ADC has been powered and PWR_INT
 //is high
 wire OutToADCEnable; 
-assign OutToADCEnable = (PWR_INT == 1 && ADC_PWR_EN == 1);
+assign OutToADCEnable = (PWR_INT == 1) & (ADC_PWR_EN == 1);
 
 
 ADC_FSM ADC_fsm (
@@ -294,7 +290,7 @@ ADC_FSM ADC_fsm (
     .adcRunCal(adcRunCal), 
     .adcEnDes(adcEnDes), 
     .adcDisDes(adcDisDes),
-	 .ADCClockLocked(ADCClockLocked),
+	 .ADCClockLocked(ADCClockOn),
     .ADCPower(ADC_PWR_EN), 
     .AnalogPower(ANALOG_PWR_EN), 
     .OutSclk(ADC_SCLK), 
@@ -314,28 +310,22 @@ ADC_FSM ADC_fsm (
 //------------------------------------------------------------------------------
 // Create the ADC input clock buffer and send the signal to the DCM
 
+wire ClkIO2Bufg;
+
 IBUFGDS #(
       .DIFF_TERM("TRUE"), 		// Differential Termination
       .IOSTANDARD("LVDS_33") 	// Specifies the I/O standard for this buffer
    ) IBUFGDS_adcClock (
-      .O(ClkADC2DCM),  			// Clock buffer output
+      .O(ClkIO2Bufg),  			// Clock buffer output
       .I(ADC_CLK_P),  			// Diff_p clock buffer input
       .IB(ADC_CLK_N) 			// Diff_n clock buffer input
    );
 	
-
-wire adcPllReset;	//Keep pll in reset state until clock is ready
-wire ClockLogic;
-
-Clock250Buffer adc_clock_buffer
-   (// Clock in ports
-    .CLK_IN1(ClkADC2DCM),      // IN
-    // Clock out ports
-    .CLK_OUT1(ADCClock),     // OUT
-    .CLK_OUT2(ADCClockDelayed),     // OUT
-    // Status and control signals
-    .RESET(OutDCMReset || resetDCM),// IN
-    .LOCKED(ADCClockLocked));      // OUT	
+BUFG BUFG_adc_clk (
+	.O(ClkADC2DCM), // 1-bit output: Clock buffer output
+	.I(ClkIO2Bufg)  // 1-bit input: Clock buffer input
+);	
+	
 
 wire testRESET, testLOCKED, clk250mhz;
 
@@ -349,21 +339,35 @@ ClockTest mainClk
     .RESET(1'b0),// IN
     .LOCKED(testLOCKED));
 
-reg [15:0] InputClockOn = 16'b0000;
-assign ClockLogic = (InputClockOn != 16'hFFFF ) && (InputClockOn != 16'b0); 
-always@(posedge clk250mhz) begin
-	InputClockOn <= {InputClockOn[14:0], ClkADC2DCM};
+reg [2:0] InputClockCounter = 3'b000;
+reg [7:0] InputClockCheck = 8'b00000000;
+reg [1:0] ClockDetect = 2'b00;
+wire NewClockDetect;
+
+assign ADCClockOn = ((InputClockCheck[7:5] != 3'b111) &  (InputClockCheck[7:5] != 3'b000) & 
+									(InputClockCheck[2:0] != 3'b111) &  (InputClockCheck[2:0] != 3'b000)); 
+
+assign NewClockDetect = (ClockDetect == 2'b01);
+
+always@(posedge ClkADC2DCM) begin
+	InputClockCounter <= InputClockCounter + 1;
 end
 
-//------------------------------------------------------------------------------
-// ADC Data Input Registers
-//------------------------------------------------------------------------------
+always@(posedge clk) begin
+	InputClockCheck <= {InputClockCheck[6:0], InputClockCounter[2]};	//InputClockCounter[2] changes at 62mhz
+	ClockDetect <= {ClockDetect[0], ADCClockOn};
+end
+
+
+/**------------------------------------------------------------------------------
+ ADC Data Input Registers
+------------------------------------------------------------------------------**/
 wire [31:0] ADCRegDataOut;		//DQD, DQ, DID, DI
 ADCDataInput ADC_Data_Capture (
     .DataInP(ADC_DATA_P), 
     .DataInN(ADC_DATA_N), 
-    .ClockIn(ADCClock), 
-    .ClockInDelayed(ADCClockDelayed), 
+    .ClockIn(ClkADC2DCM), 
+    .ClockInDelayed(ClkADC2DCM), 
     .DataOut(ADCRegDataOut)
     );
 
@@ -375,7 +379,7 @@ wire fifoRecord;
 
 // Data is recorded either with the serial command "X", or a trigger event
 // and only when there is a lock on the ADC clock
-assign fifoRecord = ADCClockLocked & (recordData || triggered);
+assign fifoRecord = ADCClockOn & (recordData | triggered);
 
 
 //Test debugging code
@@ -384,43 +388,63 @@ reg [7:0] DId = 8'b0;
 reg [7:0] DQ = 8'b0;
 reg [7:0] DQd = 8'b0;
 
-always @(posedge ClkADC2DCM) begin
+//async reset
+always @(posedge ClkADC2DCM or posedge fifoRecord) begin
 	//DI[0] <= ClkADC2DCM;
 	if(fifoRecord) begin
-		DI <= 8'b0;
-		DId <= 8'b0;
-		DQ <= 8'b0;
-		DQd <= 8'b0;
+		DI 	<= 8'd0;
+		DId 	<= 8'd0;
+		DQ 	<= 8'd0;
+		DQd 	<= 8'd0;
 	end 
 	else begin
-		DI <= DI + 1;
-		DId <= DId + 1;
-		DQ <= DQ + 1;
-		DQd <= DQd + 1;
+		DI 	<= DI + 1;
+		DId 	<= DId + 1;
+		DQ 	<= DQ + 1;
+		DQd 	<= DQd + 1;
 	end
 end
 
 DataStorage Fifos (
-    .DataIn({DQd, DQ, DId, DI}),//.DataIn(ADCRegDataOut), 
+    .DataIn(ADCRegDataOut), //{DI, DId, DQ, DQd}
     .DataOut(StoredDataOut), 
     .WriteStrobe(fifoRecord),
     .ReadEnable(adcDataRead), 
-    .WriteClock(clk250mhz), //ClkADC2DCM
-    .WriteClockDelayed(clk250mhz), //ADCClockDelayed
+    .WriteClock(ClkADC2DCM), //ClkADC2DCM
+    .WriteClockDelayed(ClkADC2DCM), //ADCClockDelayed
     .ReadClock(clk), 
-    .Reset(1'b0), 
+    .Reset(NewClockDetect), 
     .DataValid(DataValid), 
     .FifoNotFull(FifoNotFull), 
     .DataReadyToSend(DataReadyToSend),
 	 .State(fifoState)
     );
 
+//output test clock
+wire outputTestClk;
+   ODDR2 #(
+      .DDR_ALIGNMENT("NONE"), // Sets output alignment to "NONE", "C0" or "C1" 
+      .INIT(1'b0),    // Sets initial state of the Q output to 1'b0 or 1'b1
+      .SRTYPE("SYNC") // Specifies "SYNC" or "ASYNC" set/reset
+   ) clock_forward_inst (
+      .Q(outputTestClk),     // 1-bit DDR output data
+      .C0(ClkADC2DCM),  // 1-bit clock input
+      .C1(~ClkADC2DCM), // 1-bit clock input
+      .CE(1'b1),      // 1-bit clock enable input
+      .D0(1'b0), // 1-bit data input (associated with C0)
+      .D1(1'b1), // 1-bit data input (associated with C1)
+      .R(1'b0),   // 1-bit reset input
+      .S(1'b0)   // 1-bit set input
+   );
+
+
+
 //------------------------------------------------------------------------------
 // GPIO - The LEDs are inverted - so 0 is on, 1 is off
 //------------------------------------------------------------------------------
-assign GPIO[1] = 1'b0; //ClkADC2DCM;
-assign GPIO[0] = ADCClockLocked;		//red
+assign GPIO[1] = outputTestClk;  //ClkADC2DCM;
+assign GPIO[0] = ADCClockOn;		//red
 assign GPIO[2] = testLOCKED; 			//green
-assign GPIO[3] = ClockLogic;			//blue
+assign GPIO[3] = ~ADCClockOn;			//blue
 
 endmodule
