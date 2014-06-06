@@ -42,16 +42,16 @@ wire FifosValid = (validDI & validDID & validDQ & validDQD);
 wire FifosEmpty = (emptyDI | emptyDID | emptyDQ | emptyDQD);
 wire FifosFull = (fullDI | fullDID | fullDQ | fullDQD);	
 reg StoringData;
-assign FifoNotFull = (~CurrentState[1]);
+assign FifoNotFull = (CurrentState == READY_TO_STORE) | (CurrentState == STORING_DATA);
 assign DataReadyToSend = ~ConverterEmpty;
 
-localparam 	READY_TO_STORE = 2'b00,
-				STORING_DATA = 2'b01,
-				SENDING_DATA = 2'b10,
-				RESET = 2'b11;
+localparam 	RESET = 2'b00,
+				READY_TO_STORE = 2'b01,
+				STORING_DATA = 2'b10,
+				SENDING_DATA = 2'b11;
 
-reg [1:0] CurrentState = SENDING_DATA;
-reg [1:0] NextState = SENDING_DATA;
+reg [1:0] CurrentState = RESET;
+reg [1:0] NextState = RESET;
 
 assign State = CurrentState;
 
@@ -59,9 +59,9 @@ reg [1:0] WriteEnableEdge = 2'b00;
 assign WriteEnable = (CurrentState == STORING_DATA);
 
 
-always@(posedge ReadClock) begin
+always@(posedge WriteClock or posedge Reset) begin
 	if(Reset) begin
-		CurrentState <= READY_TO_STORE;
+		CurrentState <= 2'b00;
 		WriteEnableEdge <= 2'b00;
 	end
 	else begin
@@ -73,6 +73,9 @@ end
 always@(*) begin
 	NextState = CurrentState;
 	case (CurrentState)
+		RESET: begin
+			if(Reset == 1'b0) NextState = READY_TO_STORE;
+		end
 		READY_TO_STORE: begin
 			if(WriteEnableEdge == 2'b01) NextState = STORING_DATA;
 		end
@@ -80,10 +83,7 @@ always@(*) begin
 			if(FifosFull) NextState = SENDING_DATA;
 		end
 		SENDING_DATA:begin
-			if(ConverterEmpty) NextState = RESET;
-		end
-		RESET: begin
-			NextState = READY_TO_STORE;
+			if(ConverterEmpty) NextState = READY_TO_STORE;
 		end
 	endcase
 end

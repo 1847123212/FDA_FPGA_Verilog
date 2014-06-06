@@ -379,7 +379,8 @@ wire fifoRecord;
 
 // Data is recorded either with the serial command "X", or a trigger event
 // and only when there is a lock on the ADC clock
-assign fifoRecord = ADCClockOn & (recordData | triggered);
+assign fifoRecord = (recordData);// ADCClockOn &  | triggered);
+
 
 
 //Test debugging code
@@ -406,14 +407,14 @@ always @(posedge ClkADC2DCM or posedge fifoRecord) begin
 end
 
 DataStorage Fifos (
-    .DataIn(ADCRegDataOut), //{DI, DId, DQ, DQd}
+    .DataIn({DI, DId, DQ, DQd}), //ADCRegDataOut),
     .DataOut(StoredDataOut), 
     .WriteStrobe(fifoRecord),
     .ReadEnable(adcDataRead), 
     .WriteClock(ClkADC2DCM), //ClkADC2DCM
     .WriteClockDelayed(ClkADC2DCM), //ADCClockDelayed
     .ReadClock(clk), 
-    .Reset(NewClockDetect), 
+    .Reset(~ADCClockOn), 
     .DataValid(DataValid), 
     .FifoNotFull(FifoNotFull), 
     .DataReadyToSend(DataReadyToSend),
@@ -421,30 +422,30 @@ DataStorage Fifos (
     );
 
 //output test clock
-wire outputTestClk;
-   ODDR2 #(
-      .DDR_ALIGNMENT("NONE"), // Sets output alignment to "NONE", "C0" or "C1" 
-      .INIT(1'b0),    // Sets initial state of the Q output to 1'b0 or 1'b1
-      .SRTYPE("SYNC") // Specifies "SYNC" or "ASYNC" set/reset
-   ) clock_forward_inst (
-      .Q(outputTestClk),     // 1-bit DDR output data
-      .C0(ClkADC2DCM),  // 1-bit clock input
-      .C1(~ClkADC2DCM), // 1-bit clock input
-      .CE(1'b1),      // 1-bit clock enable input
-      .D0(1'b0), // 1-bit data input (associated with C0)
-      .D1(1'b1), // 1-bit data input (associated with C1)
-      .R(1'b0),   // 1-bit reset input
-      .S(1'b0)   // 1-bit set input
-   );
+//wire outputTestClk;
+//   ODDR2 #(
+//      .DDR_ALIGNMENT("NONE"), // Sets output alignment to "NONE", "C0" or "C1" 
+//      .INIT(1'b0),    // Sets initial state of the Q output to 1'b0 or 1'b1
+//      .SRTYPE("SYNC") // Specifies "SYNC" or "ASYNC" set/reset
+//   ) clock_forward_inst (
+//      .Q(outputTestClk),     // 1-bit DDR output data
+//      .C0(ADCClockOn),  // 1-bit clock input
+//      .C1(~ADCClockOn), // 1-bit clock input
+//      .CE(1'b1),      // 1-bit clock enable input
+//      .D0(1'b0), // 1-bit data input (associated with C0)
+//      .D1(1'b1), // 1-bit data input (associated with C1)
+//      .R(1'b0),   // 1-bit reset input
+//      .S(1'b0)   // 1-bit set input
+//   );
 
 
 
 //------------------------------------------------------------------------------
 // GPIO - The LEDs are inverted - so 0 is on, 1 is off
 //------------------------------------------------------------------------------
-assign GPIO[1] = outputTestClk;  //ClkADC2DCM;
+assign GPIO[1] = recordData;  //ClkADC2DCM;
 assign GPIO[0] = ADCClockOn;		//red
-assign GPIO[2] = testLOCKED; 			//green
+assign GPIO[2] = ~fifoState[1]; 			//green
 assign GPIO[3] = ~ADCClockOn;			//blue
 
 endmodule

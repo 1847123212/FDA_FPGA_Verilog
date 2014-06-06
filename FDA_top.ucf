@@ -171,5 +171,5 @@ INST "ADC_DATA_P<29>" TNM = tg_adc_data;
 INST "ADC_DATA_P<30>" TNM = tg_adc_data;
 INST "ADC_DATA_P<31>" TNM = tg_adc_data;
 
-TIMEGRP "tg_adc_data_delayed" OFFSET = IN 2 ns VALID 1.75 ns BEFORE "ADC_CLK_P" RISING;
-TIMEGRP "tg_adc_data" OFFSET = IN 2 ns VALID 1.75 ns BEFORE "ADC_CLK_P" RISING;
+TIMEGRP "tg_adc_data_delayed" OFFSET = IN 1.6 ns VALID 3.5 ns BEFORE "ADC_CLK_P" RISING;
+TIMEGRP "tg_adc_data" OFFSET = IN 2 ns VALID 3.5 ns BEFORE "ADC_CLK_P" RISING;

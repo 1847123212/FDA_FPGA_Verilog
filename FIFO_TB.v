@@ -36,19 +36,21 @@ module FIFO_TB;
 	reg WriteClockDelayed;
 	reg ReadClock;
 	reg Reset;
-
+	reg WriteStrobe;
+	
 	// Outputs
 	wire [7:0] DataOut;
 	wire DataValid;
 	wire FifoNotFull;
 	wire DataReadyToSend;
 	wire [1:0] State;
+	
 
 	// Instantiate the Unit Under Test (UUT)
 	DataStorage uut (
 		.DataIn(DataIn), 
 		.DataOut(DataOut), 
-		.WriteStrobe(FifoNotFull), 
+		.WriteStrobe(WriteStrobe), 
 		.ReadEnable(ReadEnable), 
 		.WriteClock(WriteClock), 
 		.WriteClockDelayed(WriteClockDelayed), 
@@ -67,26 +69,34 @@ module FIFO_TB;
 		// Initialize Inputs
 //		WriteEnable = 0;
 		ReadEnable = 1;
-		WriteClock = 0;
 		WriteClockDelayed = 0;
 		ReadClock = 0;
-		Reset = 0;
+		Reset = 1;
 		DQ = 8'd2;
 		DI = 8'd3;
 		DQD = 8'd0;
 		DID = 8'd1;
-
-		// Wait 100 ns for global reset to finish
-		#100;
-		#500;	//FIFOS take a while 
-		Reset = 1;
-		#4 Reset = 0;
 		
 	end
       
-	always begin
-		#2 WriteClock = ~WriteClock;
-		WriteClockDelayed = WriteClock;
+	initial begin
+		WriteStrobe = 0;
+		#1000 WriteStrobe = 1;
+		#10 WriteStrobe = 0;
+	end
+	
+	initial begin
+	  WriteClock = 0;
+	  #500;
+	  forever begin
+		 #2 WriteClock = ~WriteClock;
+		 WriteClockDelayed = WriteClock;
+	  end
+	end
+	
+	initial begin
+		#580
+		Reset = 0;
 	end
 	
 	always
