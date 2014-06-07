@@ -416,7 +416,6 @@ DataStorage Fifos (
     .ReadClock(clk), 
     .Reset(~ADCClockOn), 
     .DataValid(DataValid), 
-    .FifoNotFull(FifoNotFull), 
     .DataReadyToSend(DataReadyToSend),
 	 .State(fifoState)
     );
@@ -443,7 +442,7 @@ DataStorage Fifos (
 //------------------------------------------------------------------------------
 // GPIO - The LEDs are inverted - so 0 is on, 1 is off
 //------------------------------------------------------------------------------
-assign GPIO[1] = recordData;  //ClkADC2DCM;
+assign GPIO[1] = DataReadyToSend;  //ClkADC2DCM;
 assign GPIO[0] = ADCClockOn;		//red
 assign GPIO[2] = ~fifoState[1]; 			//green
 assign GPIO[3] = ~ADCClockOn;			//blue

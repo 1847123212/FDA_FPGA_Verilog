@@ -28,7 +28,6 @@ module DataStorage(
     input ReadClock,
     input Reset,
     output DataValid,
-    output FifoNotFull,
     output DataReadyToSend,
 	 output [1:0] State
     ); 
@@ -42,7 +41,7 @@ wire FifosValid = (validDI & validDID & validDQ & validDQD);
 wire FifosEmpty = (emptyDI | emptyDID | emptyDQ | emptyDQD);
 wire FifosFull = (fullDI | fullDID | fullDQ | fullDQD);	
 reg StoringData;
-assign FifoNotFull = (CurrentState == READY_TO_STORE) | (CurrentState == STORING_DATA);
+
 assign DataReadyToSend = ~ConverterEmpty;
 
 localparam 	RESET = 2'b00,
@@ -55,19 +54,26 @@ reg [1:0] NextState = RESET;
 
 assign State = CurrentState;
 
-reg [1:0] WriteEnableEdge = 2'b00;
+reg [1:0] WriteEnableEdgeFast = 2'b00;
+reg [1:0] WriteEnableEdgeSlow = 2'b00;
 assign WriteEnable = (CurrentState == STORING_DATA);
 
 
-always@(posedge WriteClock or posedge Reset) begin
-	if(Reset) begin
-		CurrentState <= 2'b00;
-		WriteEnableEdge <= 2'b00;
-	end
-	else begin
+//WriteStrobe is synchronous to ReadClock
+
+always@(posedge WriteClock ) begin
+//	if(Reset) begin
+//		CurrentState <= 2'b00;
+//		WriteEnableEdgeFast <= 2'b00;
+//	end
+//	else begin
 		CurrentState <= NextState;		
-		WriteEnableEdge <= {WriteEnableEdge[0], WriteStrobe};
-	end
+		WriteEnableEdgeFast <= {WriteEnableEdgeFast[0], WriteStrobe};
+//	end
+end
+
+always@(posedge ReadClock ) begin
+	WriteEnableEdgeSlow <= {WriteEnableEdgeSlow[0], WriteStrobe};
 end
 
 always@(*) begin
@@ -77,7 +83,7 @@ always@(*) begin
 			if(Reset == 1'b0) NextState = READY_TO_STORE;
 		end
 		READY_TO_STORE: begin
-			if(WriteEnableEdge == 2'b01) NextState = STORING_DATA;
+			if(WriteEnableEdgeFast == 2'b01) NextState = STORING_DATA;
 		end
 		STORING_DATA:begin
 			if(FifosFull) NextState = SENDING_DATA;
@@ -155,8 +161,8 @@ wire [31:0] dwcInput;
 wire dwcWrEn;
 
 //These assignments should mean that the first 4 bytes are the signature "FirstWord" to denote the start of data transfer
-assign dwcInput = (WriteEnableEdge == 2'b01) ? FirstWord : FifoDataOut[31:0];
-assign dwcWrEn =  (WriteEnableEdge == 2'b01) ? 1'b1 : FifosValid;
+assign dwcInput = (WriteEnableEdgeFast == 2'b01) ? FirstWord : FifoDataOut[31:0];
+assign dwcWrEn =  (WriteEnableEdgeFast == 2'b01) ? 1'b1 : FifosValid;
 
 FIFO_32to8 DataWidthConverter (
   .rst(fifoReset), // input rst

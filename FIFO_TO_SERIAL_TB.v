@@ -30,7 +30,7 @@ module FIFO_TO_SERIAL_TB;
 	reg ADCClock;
 	reg ADCClockDelayed;
 	reg clk;
-	reg txData;
+	reg [7:0] txData;
 	reg txDataWr;
 
 	
@@ -38,9 +38,8 @@ module FIFO_TO_SERIAL_TB;
 	wire [7:0] StoredDataOut;
 	wire adcDataRead;
 	wire DataValid;
-	wire FifoNotFull;
 	wire DataReadyToSend;
-	wire fifoState;
+	wire [1:0] fifoState;
 
 	// Outputs
 	wire USB_RS232_TXD;
@@ -56,7 +55,6 @@ module FIFO_TO_SERIAL_TB;
     .ReadClock(clk), 
     .Reset(1'b0), 
     .DataValid(DataValid), 
-    .FifoNotFull(FifoNotFull), 
     .DataReadyToSend(DataReadyToSend),
 	 .State(fifoState)
     );
@@ -76,20 +74,24 @@ module FIFO_TO_SERIAL_TB;
 	initial begin
 		ADCRegDataOut = 32'd0;
 		fifoRecord = 0;
-		ADCClock = 1;
-		ADCClockDelayed = 1;
+		ADCClock = 0;
+		ADCClockDelayed = 0;
 		clk = 1;
-		txData = 0;
+		txData = 8'b0;
 		txDataWr =0;
 		// Wait 100 ns for global reset to finish
 		#100;
 		#500;	//FIFOS take a while 
-		fifoRecord = 1;
 	end
       
-	always begin
-		#2 ADCClock = ~ADCClock;
-			ADCClockDelayed = ADCClock;
+	
+	initial begin
+	  ADCClock = 0;
+	  #500;
+	  forever begin
+		 #2 ADCClock = ~ADCClock;
+		 ADCClockDelayed = ADCClock;
+	  end
 	end
 	
 	always
@@ -100,6 +102,11 @@ module FIFO_TO_SERIAL_TB;
 			ADCRegDataOut[23:16] = 8'b10101010; //ADCRegDataOut[23:16] + 1;
 			ADCRegDataOut[15:8] = 8'b11001100; //ADCRegDataOut[15:8] + 1;
 			ADCRegDataOut[7:0] = 8'b11110000; //ADCRegDataOut[7:0] + 1;
+	end
+	
+	initial begin
+		#1000 fifoRecord = 1;
+		#10 fifoRecord = 0;
 	end
 	
 endmodule

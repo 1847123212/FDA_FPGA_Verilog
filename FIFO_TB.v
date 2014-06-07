@@ -41,7 +41,6 @@ module FIFO_TB;
 	// Outputs
 	wire [7:0] DataOut;
 	wire DataValid;
-	wire FifoNotFull;
 	wire DataReadyToSend;
 	wire [1:0] State;
 	
@@ -56,8 +55,7 @@ module FIFO_TB;
 		.WriteClockDelayed(WriteClockDelayed), 
 		.ReadClock(ReadClock), 
 		.Reset(Reset), 
-		.DataValid(DataValid),
-		.FifoNotFull(FifoNotFull), 
+		.DataValid(DataValid), 
 		.DataReadyToSend(DataReadyToSend),
 		.State(State)
 	);
