@@ -276,7 +276,7 @@ I2C_Comm I2C (
 //This wire is only high when the ADC has been powered and PWR_INT
 //is high
 wire OutToADCEnable; 
-assign OutToADCEnable = (PWR_INT == 1) & (ADC_PWR_EN == 1);
+assign OutToADCEnable = (PWR_INT == 1'b1) & (ADC_PWR_EN == 1'b1);
 
 
 ADC_FSM ADC_fsm (
@@ -390,6 +390,7 @@ reg [7:0] DQ = 8'b0;
 reg [7:0] DQd = 8'b0;
 
 //async reset
+/**
 always @(posedge ClkADC2DCM or posedge fifoRecord) begin
 	//DI[0] <= ClkADC2DCM;
 	if(fifoRecord) begin
@@ -405,16 +406,17 @@ always @(posedge ClkADC2DCM or posedge fifoRecord) begin
 		DQd 	<= DQd + 1;
 	end
 end
+**/
 
 DataStorage Fifos (
-    .DataIn({DI, DId, DQ, DQd}), //ADCRegDataOut),
+    .DataIn(ADCRegDataOut), //ADCRegDataOut),
     .DataOut(StoredDataOut), 
     .WriteStrobe(fifoRecord),
     .ReadEnable(adcDataRead), 
     .WriteClock(ClkADC2DCM), //ClkADC2DCM
     .WriteClockDelayed(ClkADC2DCM), //ADCClockDelayed
     .ReadClock(clk), 
-    .Reset(~ADCClockOn), 
+    .Reset(1'b0),//~ADCClockOn), 
     .DataValid(DataValid), 
     .DataReadyToSend(DataReadyToSend),
 	 .State(fifoState)
@@ -442,7 +444,7 @@ DataStorage Fifos (
 //------------------------------------------------------------------------------
 // GPIO - The LEDs are inverted - so 0 is on, 1 is off
 //------------------------------------------------------------------------------
-assign GPIO[1] = DataReadyToSend;  //ClkADC2DCM;
+assign GPIO[1] = (fifoState[0]);  //ClkADC2DCM; fifoRecord | DataReadyToSend | 
 assign GPIO[0] = ADCClockOn;		//red
 assign GPIO[2] = ~fifoState[1]; 			//green
 assign GPIO[3] = ~ADCClockOn;			//blue
