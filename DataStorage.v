@@ -27,6 +27,7 @@ module DataStorage(
     input WriteClockDelayed,
     input ReadClock,
     input Reset,
+	 input [11:0] ProgFullThresh,
     output DataValid,
     output DataReadyToSend,
 	 output [1:0] State
@@ -34,12 +35,13 @@ module DataStorage(
 
 wire FifoReadEn;
 wire fullDI, emptyDI, validDI, fullDID, emptyDID, validDID, fullDQ, emptyDQ, validDQ, fullDQD, emptyDQD, validDQD;
+wire progFullDI, progFullDID, progFullDQ, progFullDQD;
 wire [31:0] FifoDataOut;	//This data is in chronological order: [31:25] is DQD (oldest), 
 									// [24:16] is DID, [8:15] is DQ, [7:0] is DI 
 wire ConverterWriteEn, ConverterFull, ConverterEmpty, ConverterValid;
 wire FifosValid = (validDI & validDID & validDQ & validDQD);
 wire FifosEmpty = (emptyDI | emptyDID | emptyDQ | emptyDQD);
-wire FifosFull = (fullDI | fullDID | fullDQ | fullDQD);	
+wire FifosFull =  (progFullDI | progFullDID | progFullDQ | progFullDQD);//(fullDI | fullDID | fullDQ | fullDQD);	
 reg StoringData;
 
 assign DataReadyToSend = ~ConverterEmpty;
@@ -112,7 +114,9 @@ Fifi_8_bit DI_Fifo (
   .dout(FifoDataOut[7:0]), // output [7 : 0] dout
   .full(fullDI), // output full
   .empty(emptyDI), // output empty
-  .valid(validDI) // output valid
+  .valid(validDI), // output valid
+  .prog_full_thresh(ProgFullThresh), // input [11 : 0] prog_full_thresh
+  .prog_full(progFullDI) // output prog_full
 );
 
 Fifi_8_bit DID_Fifo (
@@ -125,7 +129,9 @@ Fifi_8_bit DID_Fifo (
   .dout(FifoDataOut[23:16]), // output [7 : 0] dout
   .full(fullDID), // output full
   .empty(emptyDID), // output empty
-  .valid(validDID) // output valid
+  .valid(validDID), // output valid
+  .prog_full_thresh(ProgFullThresh), // input [11 : 0] prog_full_thresh
+  .prog_full(progFullDID) // output prog_full
 );
 
 Fifi_8_bit DQ_Fifo (
@@ -138,7 +144,9 @@ Fifi_8_bit DQ_Fifo (
   .dout(FifoDataOut[15:8]), // output [7 : 0] dout
   .full(fullDQ), // output full
   .empty(emptyDQ), // output empty
-  .valid(validDQ) // output valid
+  .valid(validDQ), // output valid
+  .prog_full_thresh(ProgFullThresh), // input [11 : 0] prog_full_thresh
+  .prog_full(progFullDQ) // output prog_full
 );
 
 Fifi_8_bit DQD_Fifo (
@@ -151,7 +159,9 @@ Fifi_8_bit DQD_Fifo (
   .dout(FifoDataOut[31:24]), // output [7 : 0] dout
   .full(fullDQD), // output full
   .empty(emptyDQD), // output empty
-  .valid(validDQD) // output valid
+  .valid(validDQD), // output valid
+  .prog_full_thresh(ProgFullThresh), // input [11 : 0] prog_full_thresh
+  .prog_full(progFullDQD) // output prog_full
 );
 
 wire ConverterAlmostFull;

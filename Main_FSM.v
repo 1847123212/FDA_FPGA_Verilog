@@ -50,17 +50,22 @@ module Main_FSM(
 	 output enAutoTrigReset,
 	 output disAutoTrigReset,
 	 output resetDCM,
+	 output reg [7:0] selfTriggerValue,
+	 output enSelfTrigger,
+	 output disSelfTrigger,
 	 
 	 //uart output
 	 output reg [7:0] txData,
 	 output reg txDataWr
     );
 	 
-	reg [4:0] State = 0;
-	reg [4:0] NextState = 0;
+	reg [5:0] State = 0;
+	reg [5:0] NextState = 0;
 	 
 	reg [3:0] trigVoltageCounter = 0;
-	 
+	
+	reg [3:0] selfTriggerCounter = 0;
+	
 	localparam IDLE = 0,
 					ECHO_ON = 1,
 					ECHO_OFF = 2,
@@ -90,7 +95,12 @@ module Main_FSM(
 					RESET_DCM1 = 26,
 					RESET_DCM2 = 27,
 					RETURN_CLOCK_LOCK1 = 28,
-					RETURN_CLOCK_LOCK2 = 29;
+					RETURN_CLOCK_LOCK2 = 29, 
+					SET_SELF_TRIGGER = 30,
+					SET_SV_0 = 31,
+					SET_SV_1 = 32, 
+					ENABLE_SELF_TRIGGER = 33,
+					DISABLE_SELF_TRIGGER = 34;
 	 
 	//Logic for FSM outputs 
 	assign echoOn = (State == ECHO_ON);
@@ -113,6 +123,8 @@ module Main_FSM(
 	assign enAutoTrigReset = (State == ENABLE_AUTO_TRIG_RESET);
 	assign disAutoTrigReset = (State == DISABLE_AUTO_TRIG_RESET);
 	assign resetDCM = (State == RESET_DCM1 || State == RESET_DCM2);
+	assign enSelfTrigger = (State == ENABLE_SELF_TRIGGER);
+	assign disSelfTrigger = (State == DISABLE_SELF_TRIGGER);
 	
 	
 	always@(posedge clk) begin
@@ -161,12 +173,25 @@ module Main_FSM(
 		end
 	 end
 	 
-	 //Count the number of bits received for setting the trigger voltage
+	 //Count the number of bits received for setting the trigger DAC voltage
 	 always@(posedge clk) begin
 		if(State == IDLE)
 			trigVoltageCounter <= 4'b0;
 		else if(State == SET_TRIGGER_VOLTAGE && NewCmd)
 			trigVoltageCounter <= trigVoltageCounter + 1; 
+	 end
+	
+	 //Count the number of bits recieved for setting the self trigger level	 
+	 always@(posedge clk) begin
+		if(State == IDLE)
+			selfTriggerCounter <= 3'b0;
+		else if(State == SET_SELF_TRIGGER & NewCmd) begin
+			selfTriggerCounter <= selfTriggerCounter + 1;
+			if(Cmd == "0")
+				selfTriggerValue <= {selfTriggerValue[6:0], 1'b0};
+			else if(Cmd == "1")
+				selfTriggerValue <= {selfTriggerValue[6:0], 1'b1};
+		end
 	 end
 	
 	 always@(*) begin
@@ -196,6 +221,9 @@ module Main_FSM(
 						"V": NextState = SET_TRIGGER_VOLTAGE;
 						"W": NextState = ADC_WAKE;	
 						"X": NextState = RECORD_DATA;
+						"Y": NextState = SET_SELF_TRIGGER;
+						"Z": NextState = ENABLE_SELF_TRIGGER;
+						"z": NextState = DISABLE_SELF_TRIGGER;
 					endcase
 			end
 			ADC_RUN_CAL: NextState = COMMAND_ACK;
@@ -222,6 +250,12 @@ module Main_FSM(
 			end
 			SET_TV_0: NextState = SET_TRIGGER_VOLTAGE;
 			SET_TV_1: NextState = SET_TRIGGER_VOLTAGE;
+			SET_SELF_TRIGGER: begin
+				if(selfTriggerCounter == 4'd8)
+					NextState = COMMAND_ACK;
+			end
+			ENABLE_SELF_TRIGGER: NextState = COMMAND_ACK;
+			DISABLE_SELF_TRIGGER: NextState = COMMAND_ACK;
 			ADC_WAKE: NextState = COMMAND_ACK;
 			ADC_RUN_CAL: NextState = COMMAND_ACK;
 			RECORD_DATA: NextState = COMMAND_ACK;

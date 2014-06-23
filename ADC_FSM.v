@@ -53,6 +53,7 @@ module ADC_FSM(
 					ADC_PWR_WARMUP = 4'd1,
 					ANALOG_PWR_WARMUP = 4'd2,
 					CLOCK_LOCK = 4'd14,
+					CLOCK_WAIT = 4'd15,
 					INIT_REG_WRITE = 4'd3,
 					INIT_ADC_WARMUP = 4'd4,
 					CALIBRATION_REQUEST = 4'd5,
@@ -86,7 +87,11 @@ module ADC_FSM(
 	assign OutSclk = (OutToADCEnable) ? Sclk : 1'bz;
 	assign OutSdata = (OutToADCEnable) ? Sdata : 1'bz;
 	assign OutSelect = (OutToADCEnable) ? Select : 1'bz;
-	assign OutPD = (OutToADCEnable) ?   (CurrentState == LOW_PWR_IDLE) : 1'bz;
+	
+	//OutPD 
+	assign OutPD = ((~OutToADCEnable) | (CurrentState == ALL_PWR_OFF | CurrentState == LOW_PWR_IDLE 
+							| CurrentState == ADC_PWR_WARMUP | CurrentState == ANALOG_PWR_WARMUP)) ? 1'bz : 1'b0;
+	
 	assign OutPDQ = 1'b0;	//PDQ is always low for now
 	assign OutCal = (OutToADCEnable & (CurrentState != CALIBRATION_REQUEST)) ? 1'b0 : 1'bz;
 	
@@ -98,7 +103,8 @@ module ADC_FSM(
 									CurrentState == ANALOG_PWR_WARMUP ||
 									CurrentState == INIT_ADC_WARMUP ||
 									CurrentState == PERIPH_PWR_SHUTDOWN ||
-									CurrentState == ADC_WAKEUP);
+									CurrentState == ADC_WAKEUP ||
+									CurrentState == CLOCK_WAIT);
 	assign TimerClear = ~TimerEnable;
 	assign StartInit = (CurrentState == INIT_REG_WRITE);
 	assign StartDESEnable = (CurrentState == ENABLE_DES);
@@ -113,9 +119,10 @@ module ADC_FSM(
 		NextState = CurrentState;
 		case (CurrentState)
 			ALL_PWR_OFF: if(adcPwrOn) NextState = ADC_PWR_WARMUP;
-			ADC_PWR_WARMUP: if(TimerOut[8]) NextState = ANALOG_PWR_WARMUP;	//slightly delay the turn on of the peripheral power by ~1uS
+			ADC_PWR_WARMUP: if(TimerOut[20]) NextState = ANALOG_PWR_WARMUP;	//delay the turn on of the peripheral power
 			ANALOG_PWR_WARMUP: if(TimerOut[26]) NextState = CLOCK_LOCK; //Clock can take 10ms to stabilize
-			CLOCK_LOCK: if(ADCClockLocked) NextState = INIT_REG_WRITE;
+			CLOCK_LOCK: if(ADCClockLocked) NextState = CLOCK_WAIT;
+			CLOCK_WAIT: if(TimerOut[26]) NextState = INIT_REG_WRITE;	//wait once the clock is locked
 			INIT_REG_WRITE: if (RegWriteDone) NextState = INIT_ADC_WARMUP;
 			INIT_ADC_WARMUP: if(TimerOut[7]) NextState = CALIBRATION_REQUEST;	//take out of PD mode and wait ~500ns - automatically do calibration after power on
 			CALIBRATION_REQUEST: if(InCalRunning) NextState = CALIBRATION;

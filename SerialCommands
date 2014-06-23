@@ -41,7 +41,7 @@ W	- Wake up ADC from low power idle
 w
 X	- Record and transmit data
 x
-Y
-y
-Z
-z
+Y  - Set Self Trigger Value - follow this command with combination of 8 1s and 0s
+y  - Read self trigger value (not implemented)
+Z	- Enable self trigger to transmit when X received
+z  - Disable self trigger 

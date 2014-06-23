@@ -144,6 +144,7 @@ wire [7:0] StoredDataOut;
 wire recordData, adcPwrOn;
 wire [3:0] adcState;
 wire [1:0] fifoState;
+wire [7:0] selfTriggerValue;
 
 //Main FSM for handling UART I/O
 Main_FSM SystemFSM (
@@ -175,7 +176,10 @@ Main_FSM SystemFSM (
 	 .disAutoTrigReset(disAutoTrigReset),
 	 .resetDCM(resetDCM),
     .txData(txData), 
-    .txDataWr(txDataWr)
+    .txDataWr(txDataWr),
+	 .selfTriggerValue(selfTriggerValue),
+	 .enSelfTrigger(enSelfTrigger),
+	 .disSelfTrigger(disSelfTrigger)
     );
 
 
@@ -186,6 +190,24 @@ SystemSetting EchoSetting (
     .turnOff(echoOff), 
     .toggle(1'b0), 
     .out(echoChar)
+    );
+
+wire selfTriggerMode;
+SystemSetting SelfTriggerSetting (
+    .clk(clk), 
+    .turnOn(enSelfTrigger), 
+    .turnOff(disSelfTrigger), 
+    .toggle(1'b0), 
+    .out(selfTriggerMode)
+    );
+	 	
+wire selfTriggerWaitToRecord;		
+SystemSetting SelfTriggerWaitingToRecord (
+    .clk(clk), 
+    .turnOn(recordData & selfTriggerMode), 
+    .turnOff(selfTriggerRecord), 
+    .toggle(1'b0), 
+    .out(selfTriggerWaitToRecord)
     );
 
 wire triggerArmed;
@@ -371,6 +393,13 @@ ADCDataInput ADC_Data_Capture (
     .DataOut(ADCRegDataOut)
     );
 
+assign DITrigger = (ADCRegDataOut[7:0] < selfTriggerValue);
+assign DIDTrigger = (ADCRegDataOut[15:8] < selfTriggerValue);
+assign DQTrigger = (ADCRegDataOut[23:16] < selfTriggerValue);
+assign DQDTrigger = (ADCRegDataOut[31:24] < selfTriggerValue);
+
+assign selfTriggerRecord = DITrigger | DIDTrigger | DQTrigger | DQDTrigger;
+
 //------------------------------------------------------------------------------
 // Data FIFOs 
 //------------------------------------------------------------------------------
@@ -379,9 +408,7 @@ wire fifoRecord;
 
 // Data is recorded either with the serial command "X", or a trigger event
 // and only when there is a lock on the ADC clock
-assign fifoRecord = (recordData);// ADCClockOn &  | triggered);
-
-
+assign fifoRecord =  (selfTriggerMode) ? (selfTriggerRecord & selfTriggerWaitToRecord) : recordData;// ADCClockOn &  | triggered);
 
 //Test debugging code
 reg [7:0] DI = 8'b0;
@@ -408,6 +435,8 @@ always @(posedge ClkADC2DCM or posedge fifoRecord) begin
 end
 **/
 
+reg [11:0] ProgFullThresh = 12'd256;
+
 DataStorage Fifos (
     .DataIn(ADCRegDataOut), //ADCRegDataOut),
     .DataOut(StoredDataOut), 
@@ -419,12 +448,14 @@ DataStorage Fifos (
     .Reset(1'b0),//~ADCClockOn), 
     .DataValid(DataValid), 
     .DataReadyToSend(DataReadyToSend),
-	 .State(fifoState)
+	 .State(fifoState),
+	 .ProgFullThresh(ProgFullThresh)
     );
 
 //output test clock
 //wire outputTestClk;
 //   ODDR2 #(
+
 //      .DDR_ALIGNMENT("NONE"), // Sets output alignment to "NONE", "C0" or "C1" 
 //      .INIT(1'b0),    // Sets initial state of the Q output to 1'b0 or 1'b1
 //      .SRTYPE("SYNC") // Specifies "SYNC" or "ASYNC" set/reset
@@ -446,7 +477,7 @@ DataStorage Fifos (
 //------------------------------------------------------------------------------
 assign GPIO[1] = (fifoState[0]);  //ClkADC2DCM; fifoRecord | DataReadyToSend | 
 assign GPIO[0] = ADCClockOn;		//red
-assign GPIO[2] = ~fifoState[1]; 			//green
-assign GPIO[3] = ~ADCClockOn;			//blue
+assign GPIO[2] = ~selfTriggerMode; 			//green
+assign GPIO[3] = DITrigger;			//blue
 
 endmodule
