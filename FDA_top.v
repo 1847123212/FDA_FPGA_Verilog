@@ -200,15 +200,6 @@ SystemSetting SelfTriggerSetting (
     .toggle(1'b0), 
     .out(selfTriggerMode)
     );
-	 	
-wire selfTriggerWaitToRecord;		
-SystemSetting SelfTriggerWaitingToRecord (
-    .clk(clk), 
-    .turnOn(recordData & selfTriggerMode), 
-    .turnOff(selfTriggerRecord), 
-    .toggle(1'b0), 
-    .out(selfTriggerWaitToRecord)
-    );
 
 wire triggerArmed;
 SystemSetting TriggerArmSetting (
@@ -405,35 +396,20 @@ assign selfTriggerRecord = DITrigger | DIDTrigger | DQTrigger | DQDTrigger;
 //------------------------------------------------------------------------------
 wire FifoNotFull;
 wire fifoRecord;
+wire waitForTrigger, holdTrigger;
+
+SelfTriggerState selfTriggerState (
+    .clk(ClkADC2DCM), 
+    .selfTriggerMode(selfTriggerMode), 
+    .recordDataCommand(recordData), 
+    .triggered(selfTriggerRecord), 
+    .waitForTrigger(waitForTrigger),
+	 .holdTrigger(holdTrigger)
+    );
 
 // Data is recorded either with the serial command "X", or a trigger event
 // and only when there is a lock on the ADC clock
-assign fifoRecord =  (selfTriggerMode) ? (selfTriggerRecord & selfTriggerWaitToRecord) : recordData;// ADCClockOn &  | triggered);
-
-//Test debugging code
-reg [7:0] DI = 8'b0;
-reg [7:0] DId = 8'b0;
-reg [7:0] DQ = 8'b0;
-reg [7:0] DQd = 8'b0;
-
-//async reset
-/**
-always @(posedge ClkADC2DCM or posedge fifoRecord) begin
-	//DI[0] <= ClkADC2DCM;
-	if(fifoRecord) begin
-		DI 	<= 8'd0;
-		DId 	<= 8'd0;
-		DQ 	<= 8'd0;
-		DQd 	<= 8'd0;
-	end 
-	else begin
-		DI 	<= DI + 1;
-		DId 	<= DId + 1;
-		DQ 	<= DQ + 1;
-		DQd 	<= DQd + 1;
-	end
-end
-**/
+assign fifoRecord = (~selfTriggerMode) ? recordData : ((waitForTrigger & selfTriggerRecord) | holdTrigger );
 
 reg [11:0] ProgFullThresh = 12'd256;
 
@@ -452,25 +428,6 @@ DataStorage Fifos (
 	 .ProgFullThresh(ProgFullThresh)
     );
 
-//output test clock
-//wire outputTestClk;
-//   ODDR2 #(
-
-//      .DDR_ALIGNMENT("NONE"), // Sets output alignment to "NONE", "C0" or "C1" 
-//      .INIT(1'b0),    // Sets initial state of the Q output to 1'b0 or 1'b1
-//      .SRTYPE("SYNC") // Specifies "SYNC" or "ASYNC" set/reset
-//   ) clock_forward_inst (
-//      .Q(outputTestClk),     // 1-bit DDR output data
-//      .C0(ADCClockOn),  // 1-bit clock input
-//      .C1(~ADCClockOn), // 1-bit clock input
-//      .CE(1'b1),      // 1-bit clock enable input
-//      .D0(1'b0), // 1-bit data input (associated with C0)
-//      .D1(1'b1), // 1-bit data input (associated with C1)
-//      .R(1'b0),   // 1-bit reset input
-//      .S(1'b0)   // 1-bit set input
-//   );
-
-
 
 //------------------------------------------------------------------------------
 // GPIO - The LEDs are inverted - so 0 is on, 1 is off
@@ -478,6 +435,6 @@ DataStorage Fifos (
 assign GPIO[1] = (fifoState[0]);  //ClkADC2DCM; fifoRecord | DataReadyToSend | 
 assign GPIO[0] = ADCClockOn;		//red
 assign GPIO[2] = ~selfTriggerMode; 			//green
-assign GPIO[3] = DITrigger;			//blue
+assign GPIO[3] = ~waitForTrigger;			//blue
 
 endmodule
