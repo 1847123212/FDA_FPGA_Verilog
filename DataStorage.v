@@ -41,8 +41,11 @@ wire [31:0] FifoDataOut;	//This data is in chronological order: [31:25] is DQD (
 wire ConverterWriteEn, ConverterFull, ConverterEmpty, ConverterValid;
 wire FifosValid = (validDI & validDID & validDQ & validDQD);
 wire FifosEmpty = (emptyDI | emptyDID | emptyDQ | emptyDQD);
-wire FifosFull =  (progFullDI | progFullDID | progFullDQ | progFullDQD);//(fullDI | fullDID | fullDQ | fullDQD);	
+reg FifosFull = 0;//(fullDI | fullDID | fullDQ | fullDQD);	
 reg StoringData;
+
+always@(posedge ReadClock)
+	FifosFull <= (progFullDI | progFullDID | progFullDQ | progFullDQD);
 
 assign DataReadyToSend = ~ConverterEmpty;
 
@@ -58,20 +61,30 @@ assign State = CurrentState;
 
 reg [1:0] WriteEnableEdgeFast = 2'b00;
 reg [1:0] WriteEnableEdgeSlow = 2'b00;
-assign WriteEnable = (CurrentState == STORING_DATA);
 
+reg WriteEnableDI, WriteEnableDID, WriteEnableDQ, WriteEnableDQD;
+
+always@(posedge ReadClock) begin
+	if(CurrentState == STORING_DATA) begin		
+		WriteEnableDI <= 1'b1;
+		WriteEnableDID <=1'b1;
+		WriteEnableDQ <= 1'b1;
+		WriteEnableDQD <= 1'b1;
+	end
+	else begin
+		WriteEnableDI <= 1'b0;
+		WriteEnableDID <= 1'b0;
+		WriteEnableDQ <= 1'b0;
+		WriteEnableDQD <= 1'b0;
+	end
+end
 
 //WriteStrobe is synchronous to ReadClock
 
+//Should add reset in here
 always@(posedge WriteClock ) begin
-//	if(Reset) begin
-//		CurrentState <= 2'b00;
-//		WriteEnableEdgeFast <= 2'b00;
-//	end
-//	else begin
-		CurrentState <= NextState;		
-		WriteEnableEdgeFast <= {WriteEnableEdgeFast[0], WriteStrobe};
-//	end
+	CurrentState <= NextState;		
+	WriteEnableEdgeFast <= {WriteEnableEdgeFast[0], WriteStrobe};
 end
 
 always@(posedge ReadClock ) begin
@@ -109,7 +122,7 @@ Fifi_8_bit DI_Fifo (
   .wr_clk(WriteClock), // input wr_clk
   .rd_clk(ReadClock), // input rd_clk
   .din(DataIn[31:24]), // input [7 : 0] din
-  .wr_en(WriteEnable), // input wr_en
+  .wr_en(WriteEnableDI), // input wr_en
   .rd_en(FifoReadEn), // input rd_en
   .dout(FifoDataOut[7:0]), // output [7 : 0] dout
   .full(fullDI), // output full
@@ -124,7 +137,7 @@ Fifi_8_bit DID_Fifo (
   .wr_clk(WriteClock), // input wr_clk
   .rd_clk(ReadClock), // input rd_clk
   .din(DataIn[23:16]), // input [7 : 0] din
-  .wr_en(WriteEnable), // input wr_en
+  .wr_en(WriteEnableDID), // input wr_en
   .rd_en(FifoReadEn), // input rd_en
   .dout(FifoDataOut[23:16]), // output [7 : 0] dout
   .full(fullDID), // output full
@@ -139,7 +152,7 @@ Fifi_8_bit DQ_Fifo (
   .wr_clk(WriteClock), // input wr_clk
   .rd_clk(ReadClock), // input rd_clk
   .din(DataIn[15:8]), // input [7 : 0] din
-  .wr_en(WriteEnable), // input wr_en
+  .wr_en(WriteEnableDQ), // input wr_en
   .rd_en(FifoReadEn), // input rd_en
   .dout(FifoDataOut[15:8]), // output [7 : 0] dout
   .full(fullDQ), // output full
@@ -154,7 +167,7 @@ Fifi_8_bit DQD_Fifo (
   .wr_clk(WriteClock), // input wr_clk
   .rd_clk(ReadClock), // input rd_clk
   .din(DataIn[7:0]), // input [7 : 0] din
-  .wr_en(WriteEnable), // input wr_en
+  .wr_en(WriteEnableDQD), // input wr_en
   .rd_en(FifoReadEn), // input rd_en
   .dout(FifoDataOut[31:24]), // output [7 : 0] dout
   .full(fullDQD), // output full

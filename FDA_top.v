@@ -77,30 +77,6 @@ module FDA_top(
 
   wire ClkADC2DCM, ADCClock, ADCClockDelayed, ADCClockOn;
 
-//  DCM_SP DCM_SP_INST(
-//    .CLKIN(CLK_100MHZ),
-//    .CLKFB(clk),
-//    .RST(1'b0),
-//    .PSEN(1'b0),
-//    .PSINCDEC(1'b0),
-//    .PSCLK(1'b0),
-//    .DSSEN(1'b0),
-//    .CLK0(clknub),
-//    .CLK90(),
-//    .CLK180(),
-//    .CLK270(),
-//    .CLKDV(),
-//    .CLK2X(),
-//    .CLK2X180(),
-//    .CLKFX(),
-//    .CLKFX180(),
-//    .STATUS(),
-//    .LOCKED(),
-//    .PSDONE());
-//  defparam DCM_SP_INST.CLKIN_DIVIDE_BY_2 = "FALSE";
-//  defparam DCM_SP_INST.CLKIN_PERIOD = 10.000;
-//
-//  BUFGCE  BG (.O(clk), .CE(clk_enable), .I(clknub));
   
 //------------------------------------------------------------------------------
 // UART and device settings/state machines 
@@ -192,6 +168,7 @@ SystemSetting EchoSetting (
     .out(echoChar)
     );
 
+/**
 wire selfTriggerMode;
 SystemSetting SelfTriggerSetting (
     .clk(clk), 
@@ -200,6 +177,7 @@ SystemSetting SelfTriggerSetting (
     .toggle(1'b0), 
     .out(selfTriggerMode)
     );
+**/
 
 wire triggerArmed;
 SystemSetting TriggerArmSetting (
@@ -236,10 +214,10 @@ always@(posedge clk) begin
 end
 
 TriggerControl TriggerController (
-    .clk(clk), 
+    .clk(ClkADC2DCM), 
     .t_p(DATA_TRIGGER_P), 
     .t_n(DATA_TRIGGER_N), 
-    .armed(triggerArmed & allowArmed),	//trigger is de-armed when storing or sending data				 
+    .armed(triggerArmed & allowArmed),		//trigger is de-armed when storing or sending data				 
     .t_reset(triggerReset | t_reset),		//reset the trigger manually or automatically
     .triggered(triggered), 	
     .comp_reset_high(TRIGGER_RST_P), 
@@ -384,12 +362,14 @@ ADCDataInput ADC_Data_Capture (
     .DataOut(ADCRegDataOut)
     );
 
+/**
 assign DITrigger = (ADCRegDataOut[7:0] < selfTriggerValue);
 assign DIDTrigger = (ADCRegDataOut[15:8] < selfTriggerValue);
 assign DQTrigger = (ADCRegDataOut[23:16] < selfTriggerValue);
 assign DQDTrigger = (ADCRegDataOut[31:24] < selfTriggerValue);
 
 assign selfTriggerRecord = DITrigger | DIDTrigger | DQTrigger | DQDTrigger;
+**/
 
 //------------------------------------------------------------------------------
 // Data FIFOs 
@@ -398,6 +378,7 @@ wire FifoNotFull;
 wire fifoRecord;
 wire waitForTrigger, holdTrigger;
 
+/**
 SelfTriggerState selfTriggerState (
     .clk(ClkADC2DCM), 
     .selfTriggerMode(selfTriggerMode), 
@@ -406,10 +387,11 @@ SelfTriggerState selfTriggerState (
     .waitForTrigger(waitForTrigger),
 	 .holdTrigger(holdTrigger)
     );
+**/
 
 // Data is recorded either with the serial command "X", or a trigger event
 // and only when there is a lock on the ADC clock
-assign fifoRecord = (~selfTriggerMode) ? recordData : ((waitForTrigger & selfTriggerRecord) | holdTrigger );
+assign fifoRecord = recordData | triggered;	//the triggered signal comes from the external trigger
 
 reg [11:0] ProgFullThresh = 12'd256;
 
@@ -433,8 +415,8 @@ DataStorage Fifos (
 // GPIO - The LEDs are inverted - so 0 is on, 1 is off
 //------------------------------------------------------------------------------
 assign GPIO[1] = (fifoState[0]);  //ClkADC2DCM; fifoRecord | DataReadyToSend | 
-assign GPIO[0] = ADCClockOn;		//red
-assign GPIO[2] = ~selfTriggerMode; 			//green
-assign GPIO[3] = ~waitForTrigger;			//blue
+assign GPIO[0] = ADCClockOn;					//red
+assign GPIO[2] = ~triggerArmed; 			//green
+assign GPIO[3] = ~autoTriggerReset;			//blue
 
 endmodule
