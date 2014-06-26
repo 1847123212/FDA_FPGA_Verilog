@@ -21,16 +21,16 @@
 module DataStorage(
     input [31:0] DataIn,
     output [7:0] DataOut,
-    input WriteStrobe,
+    input WriteStrobe,	// Assumed to be synchronous with ReadClock
+	 input FastTrigger, 	// Assumed to be synchronous with WriteClock	
     input ReadEnable,
     input WriteClock,
-    input WriteClockDelayed,
     input ReadClock,
     input Reset,
 	 input [11:0] ProgFullThresh,
     output DataValid,
     output DataReadyToSend,
-	 output [1:0] State
+	 output [3:0] State
     ); 
 
 wire FifoReadEn;
@@ -38,91 +38,110 @@ wire fullDI, emptyDI, validDI, fullDID, emptyDID, validDID, fullDQ, emptyDQ, val
 wire progFullDI, progFullDID, progFullDQ, progFullDQD;
 wire [31:0] FifoDataOut;	//This data is in chronological order: [31:25] is DQD (oldest), 
 									// [24:16] is DID, [8:15] is DQ, [7:0] is DI 
-wire ConverterWriteEn, ConverterFull, ConverterEmpty, ConverterValid;
+wire ConverterFull, ConverterEmpty;
 wire FifosValid = (validDI & validDID & validDQ & validDQD);
 wire FifosEmpty = (emptyDI | emptyDID | emptyDQ | emptyDQD);
-reg FifosFull = 0;//(fullDI | fullDID | fullDQ | fullDQD);	
-reg StoringData;
+wire ConverterEmpty_wrClk, FifosEmpty_wrClk, FastTrigger_rdClk;
+wire WriteEnable, WriteStrobe_wrClk;
 
-always@(posedge ReadClock)
+
+reg FifosFull = 0;//(fullDI | fullDID | fullDQ | fullDQD);	
+
+always@(posedge WriteClock) begin
 	FifosFull <= (progFullDI | progFullDID | progFullDQ | progFullDQD);
+end
 
 assign DataReadyToSend = ~ConverterEmpty;
 
-localparam 	RESET = 2'b00,
-				READY_TO_STORE = 2'b01,
-				STORING_DATA = 2'b10,
-				SENDING_DATA = 2'b11;
+parameter RESET = 4'b0001;
+parameter READY_TO_STORE = 4'b0010;
+parameter STORING_DATA = 4'b0100;
+parameter SENDING_DATA = 4'b1000;
 
-reg [1:0] CurrentState = RESET;
-reg [1:0] NextState = RESET;
+(* FSM_ENCODING="ONE-HOT", SAFE_IMPLEMENTATION="NO" *) reg [3:0] stateWr = RESET;
 
-assign State = CurrentState;
+always@(posedge WriteClock)
+      if (Reset) begin
+         stateWr <= RESET;
+      end
+      else
+         (* FULL_CASE, PARALLEL_CASE *) case (stateWr)
+            RESET : begin
+               if (Reset == 1'b0)
+                  stateWr <= READY_TO_STORE;
+               else
+                  stateWr <= RESET;
+            end
+            READY_TO_STORE : begin
+               if (WriteStrobe_wrClk | FastTrigger)
+                  stateWr <= STORING_DATA;
+               else
+                  stateWr <= READY_TO_STORE;
+            end
+            STORING_DATA : begin
+               if (FifosFull)
+                  stateWr <= SENDING_DATA;
+               else
+                  stateWr <= STORING_DATA;
+            end
+            SENDING_DATA : begin
+               if (ConverterEmpty_wrClk & FifosEmpty_wrClk)
+                  stateWr <= READY_TO_STORE;
+               else
+                  stateWr <= SENDING_DATA;
+            end
+         endcase
 
-reg [1:0] WriteEnableEdgeFast = 2'b00;
-reg [1:0] WriteEnableEdgeSlow = 2'b00;
+assign WriteEnable = stateWr[2]; //equivalent to "STORING_DATA"
 
-reg WriteEnableDI, WriteEnableDID, WriteEnableDQ, WriteEnableDQD;
 
-always@(posedge ReadClock) begin
-	if(CurrentState == STORING_DATA) begin		
-		WriteEnableDI <= 1'b1;
-		WriteEnableDID <=1'b1;
-		WriteEnableDQ <= 1'b1;
-		WriteEnableDQD <= 1'b1;
-	end
-	else begin
-		WriteEnableDI <= 1'b0;
-		WriteEnableDID <= 1'b0;
-		WriteEnableDQ <= 1'b0;
-		WriteEnableDQD <= 1'b0;
-	end
-end
+/*********************************************************
+/ Synchronize for clock domain crossing
+**********************************************************/
+//WriteStrobe is synchronous to ReadClock 
+async_input_sync write_strobe_sync (
+    .clk(WriteClock), 
+    .async_in(WriteStrobe), 
+    .sync_out(WriteStrobe_wrClk)
+    );
+	 
+//ConverterEmpty is synchronous to ReadClock
+async_input_sync conv_empty_sync (
+    .clk(WriteClock), 
+    .async_in(ConverterEmpty), 
+    .sync_out(ConverterEmpty_wrClk)
+    );
+	 
+//FifosEmpty is synchronous to ReadClock
+async_input_sync fifos_empty_sync (
+    .clk(WriteClock), 
+    .async_in(FifosEmpty), 
+    .sync_out(FifosEmpty_wrClk)
+    );
+	 
+//FastTrigger is synchronous with WriteClock but held high for more than 2 periods of ReadClock
+async_input_sync fast_trigger_sync (
+    .clk(ReadClock), 
+    .async_in(FastTrigger), 
+    .sync_out(FastTrigger_rdClk)
+    );
 
-//WriteStrobe is synchronous to ReadClock
-
-//Should add reset in here
-always@(posedge WriteClock ) begin
-	CurrentState <= NextState;		
-	WriteEnableEdgeFast <= {WriteEnableEdgeFast[0], WriteStrobe};
-end
-
-always@(posedge ReadClock ) begin
-	WriteEnableEdgeSlow <= {WriteEnableEdgeSlow[0], WriteStrobe};
-end
-
-always@(*) begin
-	NextState = CurrentState;
-	case (CurrentState)
-		RESET: begin
-			if(Reset == 1'b0) NextState = READY_TO_STORE;
-		end
-		READY_TO_STORE: begin
-			if(WriteEnableEdgeFast == 2'b01) NextState = STORING_DATA;
-		end
-		STORING_DATA:begin
-			if(FifosFull) NextState = SENDING_DATA;
-		end
-		SENDING_DATA:begin
-			if(ConverterEmpty) NextState = READY_TO_STORE;
-		end
-	endcase
-end
+assign State = stateWr;
 
 //FifoDataOut data is in chronological order: [31:25] is DQD (oldest), 
 // [24:16] is DID, [8:15] is DQ, [7:0] is DI 
 
-//The input is in the order 
-//DI, DID, DQ, DQD
+//The input is in the order: DI, DID, DQ, DQD
+
 wire fifoReset;
-assign fifoReset = (CurrentState == RESET) | Reset;
+assign fifoReset = stateWr[0] | Reset;	//add reset because if write clock isn't running, we should hold fifo in reset
 
 Fifi_8_bit DI_Fifo (
   .rst(fifoReset), // input rst
   .wr_clk(WriteClock), // input wr_clk
   .rd_clk(ReadClock), // input rd_clk
   .din(DataIn[31:24]), // input [7 : 0] din
-  .wr_en(WriteEnableDI), // input wr_en
+  .wr_en(WriteEnable), // input wr_en
   .rd_en(FifoReadEn), // input rd_en
   .dout(FifoDataOut[7:0]), // output [7 : 0] dout
   .full(fullDI), // output full
@@ -137,7 +156,7 @@ Fifi_8_bit DID_Fifo (
   .wr_clk(WriteClock), // input wr_clk
   .rd_clk(ReadClock), // input rd_clk
   .din(DataIn[23:16]), // input [7 : 0] din
-  .wr_en(WriteEnableDID), // input wr_en
+  .wr_en(WriteEnable), // input wr_en
   .rd_en(FifoReadEn), // input rd_en
   .dout(FifoDataOut[23:16]), // output [7 : 0] dout
   .full(fullDID), // output full
@@ -152,7 +171,7 @@ Fifi_8_bit DQ_Fifo (
   .wr_clk(WriteClock), // input wr_clk
   .rd_clk(ReadClock), // input rd_clk
   .din(DataIn[15:8]), // input [7 : 0] din
-  .wr_en(WriteEnableDQ), // input wr_en
+  .wr_en(WriteEnable), // input wr_en
   .rd_en(FifoReadEn), // input rd_en
   .dout(FifoDataOut[15:8]), // output [7 : 0] dout
   .full(fullDQ), // output full
@@ -167,7 +186,7 @@ Fifi_8_bit DQD_Fifo (
   .wr_clk(WriteClock), // input wr_clk
   .rd_clk(ReadClock), // input rd_clk
   .din(DataIn[7:0]), // input [7 : 0] din
-  .wr_en(WriteEnableDQD), // input wr_en
+  .wr_en(WriteEnable), // input wr_en
   .rd_en(FifoReadEn), // input rd_en
   .dout(FifoDataOut[31:24]), // output [7 : 0] dout
   .full(fullDQD), // output full
@@ -178,16 +197,60 @@ Fifi_8_bit DQD_Fifo (
 );
 
 wire ConverterAlmostFull;
-assign FifoReadEn = (~ConverterAlmostFull &  ~FifosEmpty);	// Read from FIFOs when the converter is not full and the FIFOs are not empty
 reg [31:0] FirstWord = 32'b11111111100000000111111100000000;
 wire [31:0] dwcInput;
 wire dwcWrEn;
 
+parameter RESET_DWC 				= 5'b00001;
+parameter READY_TO_STORE_DWC	= 5'b00010;
+parameter LOAD_FIRST_WORD 		= 5'b00100;
+parameter WAIT_FOR_DATA 		= 5'b01000;
+parameter SENDING_DATA_DWC 	= 5'b10000;
+
+(* FSM_ENCODING="ONE-HOT", SAFE_IMPLEMENTATION="NO" *) reg [4:0] stateDWC = RESET;
+
+always@(posedge ReadClock)
+      if (Reset) begin
+         stateDWC <= RESET_DWC;
+      end
+      else
+         (* FULL_CASE, PARALLEL_CASE *) case (stateDWC)
+            RESET : begin
+               if (Reset == 1'b0)
+                  stateDWC <= READY_TO_STORE_DWC;
+               else
+                  stateDWC <= RESET;
+            end
+            READY_TO_STORE_DWC : begin
+               if (WriteStrobe | FastTrigger_rdClk)
+                  stateDWC <= LOAD_FIRST_WORD;
+               else
+                  stateDWC <= READY_TO_STORE_DWC;
+            end
+            LOAD_FIRST_WORD : begin
+                  stateDWC <= WAIT_FOR_DATA;
+            end
+				WAIT_FOR_DATA : begin
+					if(~FifosEmpty)
+						stateDWC <= SENDING_DATA_DWC;
+					else
+						stateDWC <= WAIT_FOR_DATA;
+				end
+            SENDING_DATA_DWC: begin
+               if (ConverterEmpty & FifosEmpty)
+                  stateDWC <= READY_TO_STORE_DWC;
+               else
+                  stateDWC <= SENDING_DATA_DWC;
+            end
+         endcase
+
+
+// Read from FIFOs into DWC when the converter is not full and the FIFOs are not empty and SENDING_DATA_DWC
+assign FifoReadEn = (~ConverterAlmostFull & ~FifosEmpty & stateDWC[4]);
+
 //These assignments should mean that the first 4 bytes are the signature "FirstWord" to denote the start of data transfer
-assign dwcInput = (WriteEnableEdgeSlow == 2'b01) ? FirstWord : FifoDataOut[31:0];
-//assign dwcInput = (WriteStrobe) ? FirstWord : FifoDataOut[31:0];
-assign dwcWrEn =  (WriteEnableEdgeSlow == 2'b01) ? 1'b1 : FifosValid;
-//assign dwcWrEn =  (WriteStrobe) ? 1'b1 : FifosValid;
+assign dwcInput = (stateDWC[2]) ? FirstWord : FifoDataOut[31:0];	//stateDWC[2] is "LOAD_FIRST_WORD"
+assign dwcWrEn =  (stateDWC[2]) ? 1'b1 : FifosValid;
 
 FIFO_32to8 DataWidthConverter (
   .rst(fifoReset), // input rst

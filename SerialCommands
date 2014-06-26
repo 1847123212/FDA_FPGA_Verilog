@@ -1,6 +1,7 @@
 A	- 
 a	- 
-B	- Toggle blue LED
+B	- Enable Auto-Trigger Reset
+b  - Disable auto trigger reset
 C	- Run ADC calibration
 D	- NOT IMPLEMMENTED**Enable dual edge sampling (DES) on ADC
 d	- NOT IMPLEMMENTED**Disable DES 
@@ -8,7 +9,7 @@ E	- Turn on received character echo
 e 	- Turn off received character echo
 F
 f
-G	- Toggle green LED
+G	- NOT IMPLEMMENTED**Toggle green LED
 H
 h
 I	- 
@@ -28,12 +29,12 @@ P
 p
 Q	- **NOT IMPLEMMENTED**Enable Q input on ADC (must already be powered) - enables the PDQ pin 
 q	- **NOT IMPLEMMENTED**Disable Q input on ADC (must already be powered) - Unknow behavior if in DES mode
-R 	- Toggle red LED
+R 	- **NOT IMPLEMMENTED**Toggle red LED
 S	- Put ADC in low power (sleep) idle.
 s
 T	- Enable the data trigger
 t	- Disable the data trigger
-U	- Clear the data trigger 
+U	- Clear/Reset the data trigger 
 u
 V	- Set trigger voltage level - must be followed by ten 1s or 0s
 v	- Read trigger voltage level

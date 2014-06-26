@@ -19,7 +19,7 @@
 //
 //////////////////////////////////////////////////////////////////////////////////
 module TriggerControl(
-	 input clk,
+	 input clk,	//this is the ADC clock
     input t_p,
     input t_n,
     input armed,
@@ -33,7 +33,23 @@ module TriggerControl(
 	wire reset_signal;
 	reg triggered_out = 1'b0;
 	reg [1:0] reset_requested = 2'b0;
-	assign triggered = triggered_out;
+	
+	assign reset_signal =  ~(reset_requested[1] == 0 & reset_requested[0] == 1);	 //only do reset if high
+	
+	always@(posedge clk) begin
+		reset_requested [1:0] = {reset_requested [0], t_reset & triggered};
+	end
+
+   (* ASYNC_REG="TRUE" *) reg [1:0] sreg;                                                                           
+   always @(posedge clk) begin
+		//sync_out <= sreg[1];
+		if(t_reset)
+			sreg <= 2'b00;
+		else if (armed)
+			sreg <= {sreg[0], t_out};
+   end
+
+	assign triggered = sreg[1];
 
 	IBUFDS #(
       .DIFF_TERM("FALSE"),   // Differential Termination
@@ -44,6 +60,7 @@ module TriggerControl(
       .IB(t_n) // Diff_n buffer input (connect directly to top-level port)
    );
 
+/**
 	//signal is clocked in by the ADC clock
 	//CE is controlled by the armed input
 	(* IOB = "true" *)	
@@ -54,7 +71,7 @@ module TriggerControl(
 		.R(t_reset),      // 1-bit Synchronous reset input
 		.D(t_out) 			// 1-bit Data input
 	);
-	
+**/	
    OBUFT #(
       .DRIVE(24),   // Specify the output drive strength
       .IOSTANDARD("LVCMOS33"), // Specify the output I/O standard
@@ -75,12 +92,5 @@ module TriggerControl(
       .T(reset_signal)      	// 3-state enable input 
    );
 
-
-	assign reset_signal =  ~(reset_requested[1] == 0 && reset_requested[0] == 1);	 //only do reset if high
-	
-	always@(posedge clk) begin
-		reset_requested [1:0] = {reset_requested [0], t_reset & triggered_r};
-		triggered_out <= triggered_r;
-	end
-	
 endmodule
+

@@ -1,0 +1,9 @@
+[Inputs]
+clk
+async_in
+[Outputs]
+sync_out
+[BiDir]
+[ATTRIBUTES]
+VeriModel async_input_sync
+

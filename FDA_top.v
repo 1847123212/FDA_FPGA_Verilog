@@ -71,12 +71,10 @@ module FDA_top(
 
   wire clk;
   wire clknub;
-  wire clk_enable;
-  
-  assign clk_enable = 1'b1;
 
   wire ClkADC2DCM, ADCClock, ADCClockDelayed, ADCClockOn;
 
+  wire Red, Green, Blue;
   
 //------------------------------------------------------------------------------
 // UART and device settings/state machines 
@@ -119,7 +117,7 @@ wire [7:0] StoredDataOut;
 
 wire recordData, adcPwrOn;
 wire [3:0] adcState;
-wire [1:0] fifoState;
+wire [3:0] fifoState;
 wire [7:0] selfTriggerValue;
 
 //Main FSM for handling UART I/O
@@ -179,16 +177,18 @@ SystemSetting SelfTriggerSetting (
     );
 **/
 
-wire triggerArmed;
+wire triggered;
+wire allowArmed, t_reset, triggered_100mhz;
+
+wire triggerArmed, autoTriggerReset;
 SystemSetting TriggerArmSetting (
     .clk(clk), 
     .turnOn(triggerOn), 
-    .turnOff(triggerOff), 
+    .turnOff(triggerOff | (triggered_100mhz & (~autoTriggerReset))), 
     .toggle(1'b0), 
     .out(triggerArmed)
     );
 	 
-wire autoTriggerReset;
 SystemSetting TriggerAutoResetSetting (
     .clk(clk), 
     .turnOn(enAutoTrigReset), 
@@ -196,28 +196,24 @@ SystemSetting TriggerAutoResetSetting (
     .toggle(1'b0), 
     .out(autoTriggerReset)
     );
-	 
-wire Red, Green, Blue;
 
 //------------------------------------------------------------------------------
 // Trigger
 //------------------------------------------------------------------------------
-wire triggered;
-reg [3:0] fifoStateChange = 4'b0;
-wire allowArmed, t_reset;
-assign allowArmed = (fifoStateChange == 4'b0);
-assign t_reset = autoTriggerReset & (fifoStateChange == 4'b1000);	//if auto trigger reset is enabled, reset when the fifo
-																						//state changes from Sending Data to Ready
 
-always@(posedge clk) begin
-	fifoStateChange[3:0] <= {fifoStateChange[1:0], fifoState[1:0]};
-end
+async_input_sync generate_slow_trigger (
+    .clk(clk), 
+    .async_in(triggered), 
+    .sync_out(triggered_100mhz)
+    );
+
+assign t_reset = (fifoState == 4'b1000);	//always reset the trigger 
 
 TriggerControl TriggerController (
     .clk(ClkADC2DCM), 
     .t_p(DATA_TRIGGER_P), 
-    .t_n(DATA_TRIGGER_N), 
-    .armed(triggerArmed & allowArmed),		//trigger is de-armed when storing or sending data				 
+    .t_n(DATA_TRIGGER_N),
+    .armed(triggerArmed),		//trigger is de-armed when storing or sending data				 
     .t_reset(triggerReset | t_reset),		//reset the trigger manually or automatically
     .triggered(triggered), 	
     .comp_reset_high(TRIGGER_RST_P), 
@@ -333,19 +329,23 @@ ClockTest mainClk
 reg [2:0] InputClockCounter = 3'b000;
 reg [7:0] InputClockCheck = 8'b00000000;
 reg [1:0] ClockDetect = 2'b00;
-wire NewClockDetect;
+wire clk_check_100mhz;
 
 assign ADCClockOn = ((InputClockCheck[7:5] != 3'b111) &  (InputClockCheck[7:5] != 3'b000) & 
 									(InputClockCheck[2:0] != 3'b111) &  (InputClockCheck[2:0] != 3'b000)); 
-
-assign NewClockDetect = (ClockDetect == 2'b01);
 
 always@(posedge ClkADC2DCM) begin
 	InputClockCounter <= InputClockCounter + 1;
 end
 
+async_input_sync input_clk_counter_sync (
+    .clk(clk), 
+    .async_in(InputClockCounter[2]), //InputClockCounter[2] changes at 62mhz
+    .sync_out(clk_check_100mhz)
+    );
+
 always@(posedge clk) begin
-	InputClockCheck <= {InputClockCheck[6:0], InputClockCounter[2]};	//InputClockCounter[2] changes at 62mhz
+	InputClockCheck <= {InputClockCheck[6:0], clk_check_100mhz};
 	ClockDetect <= {ClockDetect[0], ADCClockOn};
 end
 
@@ -390,20 +390,20 @@ SelfTriggerState selfTriggerState (
 **/
 
 // Data is recorded either with the serial command "X", or a trigger event
-// and only when there is a lock on the ADC clock
-assign fifoRecord = recordData | triggered;	//the triggered signal comes from the external trigger
+// and only when there is a lock on the ADC clock.
+// The triggered signal comes from the external trigger
 
 reg [11:0] ProgFullThresh = 12'd256;
 
 DataStorage Fifos (
     .DataIn(ADCRegDataOut), //ADCRegDataOut),
     .DataOut(StoredDataOut), 
-    .WriteStrobe(fifoRecord),
+    .WriteStrobe(recordData),
+	 .FastTrigger(triggered),
     .ReadEnable(adcDataRead), 
     .WriteClock(ClkADC2DCM), //ClkADC2DCM
-    .WriteClockDelayed(ClkADC2DCM), //ADCClockDelayed
     .ReadClock(clk), 
-    .Reset(1'b0),//~ADCClockOn), 
+    .Reset(~ADCClockOn),
     .DataValid(DataValid), 
     .DataReadyToSend(DataReadyToSend),
 	 .State(fifoState),
@@ -414,9 +414,20 @@ DataStorage Fifos (
 //------------------------------------------------------------------------------
 // GPIO - The LEDs are inverted - so 0 is on, 1 is off
 //------------------------------------------------------------------------------
+
+reg [23:0] countdelay = 0;
+
+always@(posedge clk) begin
+	if(~ADCClockOn)
+		countdelay <= 24'b0;
+	else if(~countdelay[23])
+		countdelay <= countdelay + 1;
+		
+end
+
 assign GPIO[1] = (fifoState[0]);  //ClkADC2DCM; fifoRecord | DataReadyToSend | 
-assign GPIO[0] = ADCClockOn;					//red
-assign GPIO[2] = ~triggerArmed; 			//green
-assign GPIO[3] = ~autoTriggerReset;			//blue
+assign GPIO[0] = countdelay[23];					//red
+assign GPIO[2] = ~triggerArmed; 					//green
+assign GPIO[3] = ~triggered;						//blue
 
 endmodule

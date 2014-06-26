@@ -37,6 +37,8 @@ module FIFO_TB;
 	reg ReadClock;
 	reg Reset;
 	reg WriteStrobe;
+	reg [11:0] ProgFullThresh;
+	reg FastTrigger;
 	
 	// Outputs
 	wire [7:0] DataOut;
@@ -49,15 +51,16 @@ module FIFO_TB;
 	DataStorage uut (
 		.DataIn(DataIn), 
 		.DataOut(DataOut), 
-		.WriteStrobe(WriteStrobe), 
+		.WriteStrobe(WriteStrobe),
 		.ReadEnable(ReadEnable), 
-		.WriteClock(WriteClock), 
-		.WriteClockDelayed(WriteClockDelayed), 
+		.WriteClock(WriteClock),
 		.ReadClock(ReadClock), 
 		.Reset(Reset), 
 		.DataValid(DataValid), 
 		.DataReadyToSend(DataReadyToSend),
-		.State(State)
+		.State(State),
+		.ProgFullThresh(ProgFullThresh),
+		.FastTrigger(FastTrigger)
 	);
 	
 	assign DataIn = {DI, DID, DQ, DQD};
@@ -67,19 +70,18 @@ module FIFO_TB;
 		// Initialize Inputs
 //		WriteEnable = 0;
 		ReadEnable = 1;
-		WriteClockDelayed = 0;
 		ReadClock = 0;
 		Reset = 1;
 		DQ = 8'd2;
 		DI = 8'd3;
 		DQD = 8'd0;
 		DID = 8'd1;
-		
+		ProgFullThresh = 12'd32;
 	end
       
 	initial begin
 		WriteStrobe = 0;
-		#1000 WriteStrobe = 1;
+		#1005 WriteStrobe = 1;
 		#10 WriteStrobe = 0;
 	end
 	
