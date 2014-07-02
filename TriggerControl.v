@@ -23,33 +23,92 @@ module TriggerControl(
     input t_p,
     input t_n,
     input armed,
-	 input t_reset,
+	 input module_reset,
+	 input manual_reset,
+	 input auto_reset,
     output triggered,
     output comp_reset_high,
-    output comp_reset_low
+    output comp_reset_low,
+	 output [3:0] state_w
     );
 
-	wire t_out;
+	wire t_out, manual_reset_sync;
 	wire reset_signal;
-	reg triggered_out = 1'b0;
-	reg [1:0] reset_requested = 2'b0;
 	
-	assign reset_signal =  ~(reset_requested[1] == 0 & reset_requested[0] == 1);	 //only do reset if high
+	//State machine for trigger
 	
+	parameter IDLE = 4'b0001;
+	parameter ARMED = 4'b0010;
+	parameter TRIGGERED = 4'b0100;
+	parameter RESET = 4'b1000;
+
+	(* FSM_ENCODING="ONE-HOT", SAFE_IMPLEMENTATION="NO" *) reg [3:0] state = IDLE;
+	always@(posedge clk or posedge module_reset)
+      if (module_reset) begin
+         state <= IDLE;
+      end
+      else
+         (* FULL_CASE, PARALLEL_CASE *) case (state)
+            IDLE : begin
+               if (armed)
+                  state <= ARMED;
+					else if (manual_reset_sync)
+						state <= RESET;
+               else
+                  state <= IDLE;
+            end
+            ARMED : begin
+               if (triggered)
+                  state <= TRIGGERED;
+					else if (armed == 1'b0)
+						state <= IDLE;
+               else
+                  state <= ARMED;
+            end
+            TRIGGERED : begin
+               if (triggerCounter[2] & (manual_reset_sync | auto_reset))
+                  state <= RESET;
+               else
+                  state <= TRIGGERED;
+            end
+            RESET : begin
+					state <= IDLE;
+            end
+         endcase
+
+	assign state_w = state;
+
+	// use triggerCounter to delay the trigger reset by 4 clock cycles
+	reg [2:0] triggerCounter = 3'b1;
 	always@(posedge clk) begin
-		reset_requested [1:0] = {reset_requested [0], t_reset & triggered};
+		if(state != TRIGGERED)
+			triggerCounter <= 3'b0;
+		else if(~triggerCounter[2])
+			triggerCounter <= triggerCounter + 1;
 	end
 
-   (* ASYNC_REG="TRUE" *) reg [1:0] sreg;                                                                           
+	//trigger input logic to synchronize signal
+	(* ASYNC_REG="TRUE" *) reg [1:0] sreg;                                                                           
    always @(posedge clk) begin
-		//sync_out <= sreg[1];
-		if(t_reset)
+		if(state != ARMED)
 			sreg <= 2'b00;
-		else if (armed)
+		else
 			sreg <= {sreg[0], t_out};
    end
 
 	assign triggered = sreg[1];
+
+	// Logic for for trigger reset
+	// The trigger reset lines should only ever be asserted if
+	// a reset is requested AND the trigger input is high.
+	// reset_signal is asserted LOW to do reset - that is why the logic is inverted
+	assign reset_signal =  ~((state == RESET) & t_out);
+	
+	async_input_sync manual_reset_sync_module (
+    .clk(clk), 
+    .async_in(manual_reset), 
+    .sync_out(manual_reset_sync)
+    );
 
 	IBUFDS #(
       .DIFF_TERM("FALSE"),   // Differential Termination
@@ -60,18 +119,12 @@ module TriggerControl(
       .IB(t_n) // Diff_n buffer input (connect directly to top-level port)
    );
 
-/**
-	//signal is clocked in by the ADC clock
-	//CE is controlled by the armed input
-	(* IOB = "true" *)	
-	FDRE FDRE_inst (
-		.Q(triggered_r),  // 1-bit Data output
-		.C(clk),      		// 1-bit Clock input
-		.CE(armed),    	// 1-bit Clock enable input
-		.R(t_reset),      // 1-bit Synchronous reset input
-		.D(t_out) 			// 1-bit Data input
-	);
-**/	
+	
+	//Output buffers for the comparator reset logic
+	//The T enable pin is active low - that is, when T is high,
+	//the output is Z or high impedance. When T is low, the output
+	// is I.
+
    OBUFT #(
       .DRIVE(24),   // Specify the output drive strength
       .IOSTANDARD("LVCMOS33"), // Specify the output I/O standard

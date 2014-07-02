@@ -53,6 +53,7 @@ module Main_FSM(
 	 output reg [7:0] selfTriggerValue,
 	 output enSelfTrigger,
 	 output disSelfTrigger,
+	 output reg [13:0] storageAmount, 
 	 
 	 //uart output
 	 output reg [7:0] txData,
@@ -62,9 +63,10 @@ module Main_FSM(
 	reg [5:0] State = 0;
 	reg [5:0] NextState = 0;
 	 
+	//counters for reading in values
 	reg [3:0] trigVoltageCounter = 0;
-	
 	reg [3:0] selfTriggerCounter = 0;
+	reg [3:0] dataStorageCounter = 0;
 	
 	localparam IDLE = 0,
 					ECHO_ON = 1,
@@ -97,10 +99,13 @@ module Main_FSM(
 					RETURN_CLOCK_LOCK1 = 28,
 					RETURN_CLOCK_LOCK2 = 29, 
 					SET_SELF_TRIGGER = 30,
-					SET_SV_0 = 31,
-					SET_SV_1 = 32, 
+					SET_SV_0 = 31,	//not currently used
+					SET_SV_1 = 32, //not currently used
 					ENABLE_SELF_TRIGGER = 33,
-					DISABLE_SELF_TRIGGER = 34;
+					DISABLE_SELF_TRIGGER = 34,
+					SET_DATA_STORAGE_VALUE= 35, 
+					SET_DS_0 = 36, //not currently used
+					SET_DS_1 = 37; //not currently used
 	 
 	//Logic for FSM outputs 
 	assign echoOn = (State == ECHO_ON);
@@ -143,8 +148,8 @@ module Main_FSM(
 		end
 		//Send ACK character
 		else if(State == COMMAND_ACK)begin
-			txData <= "*";
-			txDataWr <= 1'b1;
+			//txData <= "*";
+			//txDataWr <= 1'b1;
 		end
 		//Send an error character
 		else if(State == ERROR_IN2)begin
@@ -184,7 +189,7 @@ module Main_FSM(
 	 //Count the number of bits recieved for setting the self trigger level	 
 	 always@(posedge clk) begin
 		if(State == IDLE)
-			selfTriggerCounter <= 3'b0;
+			selfTriggerCounter <= 4'b0;
 		else if(State == SET_SELF_TRIGGER & NewCmd) begin
 			selfTriggerCounter <= selfTriggerCounter + 1;
 			if(Cmd == "0")
@@ -193,6 +198,20 @@ module Main_FSM(
 				selfTriggerValue <= {selfTriggerValue[6:0], 1'b1};
 		end
 	 end
+	
+	 //Count the number of bits recieved for setting the data storage value	 
+	 always@(posedge clk) begin
+		if(State == IDLE)
+			dataStorageCounter <= 4'b0;
+		else if(State == SET_DATA_STORAGE_VALUE & NewCmd) begin
+			dataStorageCounter <= dataStorageCounter + 1;
+			if(Cmd == "0")
+				storageAmount <= {storageAmount[12:0], 1'b0};
+			else if(Cmd == "1")
+				storageAmount <= {storageAmount[12:0], 1'b1};
+		end
+	 end
+	
 	
 	 always@(*) begin
 		NextState = State;
@@ -209,6 +228,7 @@ module Main_FSM(
 						"E": NextState = ECHO_ON;
 						"e": NextState = ECHO_OFF;
 						"F": NextState = FIFO_STATE1;
+						"K": NextState = SET_DATA_STORAGE_VALUE;
 						"O": NextState = ADC_PWR_ON;
 						"o": NextState = ADC_PWR_OFF;
 						"L": NextState = RETURN_CLOCK_LOCK1;
@@ -256,6 +276,10 @@ module Main_FSM(
 			end
 			ENABLE_SELF_TRIGGER: NextState = COMMAND_ACK;
 			DISABLE_SELF_TRIGGER: NextState = COMMAND_ACK;
+			SET_DATA_STORAGE_VALUE:begin
+				if(dataStorageCounter == 4'd14)
+					NextState = COMMAND_ACK;
+			end 
 			ADC_WAKE: NextState = COMMAND_ACK;
 			ADC_RUN_CAL: NextState = COMMAND_ACK;
 			RECORD_DATA: NextState = COMMAND_ACK;

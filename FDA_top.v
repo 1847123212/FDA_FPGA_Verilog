@@ -119,6 +119,7 @@ wire recordData, adcPwrOn;
 wire [3:0] adcState;
 wire [3:0] fifoState;
 wire [7:0] selfTriggerValue;
+wire [13:0] ProgFullThresh;
 
 //Main FSM for handling UART I/O
 Main_FSM SystemFSM (
@@ -153,7 +154,8 @@ Main_FSM SystemFSM (
     .txDataWr(txDataWr),
 	 .selfTriggerValue(selfTriggerValue),
 	 .enSelfTrigger(enSelfTrigger),
-	 .disSelfTrigger(disSelfTrigger)
+	 .disSelfTrigger(disSelfTrigger),
+	 .storageAmount(ProgFullThresh)
     );
 
 
@@ -178,13 +180,12 @@ SystemSetting SelfTriggerSetting (
 **/
 
 wire triggered;
-wire allowArmed, t_reset, triggered_100mhz;
 
 wire triggerArmed, autoTriggerReset;
 SystemSetting TriggerArmSetting (
     .clk(clk), 
-    .turnOn(triggerOn), 
-    .turnOff(triggerOff | (triggered_100mhz & (~autoTriggerReset))), 
+    .turnOn(triggerOn),
+    .turnOff(triggerOff ), 
     .toggle(1'b0), 
     .out(triggerArmed)
     );
@@ -200,24 +201,20 @@ SystemSetting TriggerAutoResetSetting (
 //------------------------------------------------------------------------------
 // Trigger
 //------------------------------------------------------------------------------
-
-async_input_sync generate_slow_trigger (
-    .clk(clk), 
-    .async_in(triggered), 
-    .sync_out(triggered_100mhz)
-    );
-
-assign t_reset = (fifoState == 4'b1000);	//always reset the trigger 
+wire [3:0] triggerState;
 
 TriggerControl TriggerController (
-    .clk(ClkADC2DCM), 
-    .t_p(DATA_TRIGGER_P), 
+    .clk(ClkADC2DCM),
+    .t_p(DATA_TRIGGER_P),
     .t_n(DATA_TRIGGER_N),
-    .armed(triggerArmed),		//trigger is de-armed when storing or sending data				 
-    .t_reset(triggerReset | t_reset),		//reset the trigger manually or automatically
-    .triggered(triggered), 	
+    .armed(triggerArmed),						//trigger is de-armed when storing or sending data				 
+    .module_reset(~ADCClockOn),
+	 .manual_reset(triggerReset), 
+    .auto_reset(autoTriggerReset), 
+    .triggered(triggered),
     .comp_reset_high(TRIGGER_RST_P), 
-    .comp_reset_low(TRIGGER_RST_N)
+    .comp_reset_low(TRIGGER_RST_N),
+	 .state_w(triggerState)
     );
 
 //------------------------------------------------------------------------------
@@ -393,8 +390,6 @@ SelfTriggerState selfTriggerState (
 // and only when there is a lock on the ADC clock.
 // The triggered signal comes from the external trigger
 
-reg [11:0] ProgFullThresh = 12'd256;
-
 DataStorage Fifos (
     .DataIn(ADCRegDataOut), //ADCRegDataOut),
     .DataOut(StoredDataOut), 
@@ -428,6 +423,6 @@ end
 assign GPIO[1] = (fifoState[0]);  //ClkADC2DCM; fifoRecord | DataReadyToSend | 
 assign GPIO[0] = countdelay[23];					//red
 assign GPIO[2] = ~triggerArmed; 					//green
-assign GPIO[3] = ~triggered;						//blue
+assign GPIO[3] = ~triggerState[2];						//blue
 
 endmodule
