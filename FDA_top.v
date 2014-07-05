@@ -108,7 +108,7 @@ wire [7:0] StoredDataOut;
 		 .generalData(txData), 
 		 .generalDataWrite(txDataWr), 
 		 .adcDataStreamingMode(DataReadyToSend),  //input equal to adc fifo not empty
-		 .adcDataValid(DataValid), 					//input to UART Start signal
+		 .adcDataValid(DataReadyToSend), 			//input to UART Start signal
 		 .adcDataStrobe(adcDataRead),					//output to adc FIFO 
 		 .SDO(USB_RS232_TXD)
 		 );
@@ -167,17 +167,6 @@ SystemSetting EchoSetting (
     .toggle(1'b0), 
     .out(echoChar)
     );
-
-/**
-wire selfTriggerMode;
-SystemSetting SelfTriggerSetting (
-    .clk(clk), 
-    .turnOn(enSelfTrigger), 
-    .turnOff(disSelfTrigger), 
-    .toggle(1'b0), 
-    .out(selfTriggerMode)
-    );
-**/
 
 wire triggered;
 
@@ -359,15 +348,6 @@ ADCDataInput ADC_Data_Capture (
     .DataOut(ADCRegDataOut)
     );
 
-/**
-assign DITrigger = (ADCRegDataOut[7:0] < selfTriggerValue);
-assign DIDTrigger = (ADCRegDataOut[15:8] < selfTriggerValue);
-assign DQTrigger = (ADCRegDataOut[23:16] < selfTriggerValue);
-assign DQDTrigger = (ADCRegDataOut[31:24] < selfTriggerValue);
-
-assign selfTriggerRecord = DITrigger | DIDTrigger | DQTrigger | DQDTrigger;
-**/
-
 //------------------------------------------------------------------------------
 // Data FIFOs 
 //------------------------------------------------------------------------------
@@ -375,35 +355,39 @@ wire FifoNotFull;
 wire fifoRecord;
 wire waitForTrigger, holdTrigger;
 
-/**
-SelfTriggerState selfTriggerState (
-    .clk(ClkADC2DCM), 
-    .selfTriggerMode(selfTriggerMode), 
-    .recordDataCommand(recordData), 
-    .triggered(selfTriggerRecord), 
-    .waitForTrigger(waitForTrigger),
-	 .holdTrigger(holdTrigger)
-    );
-**/
+//------------------------------------------------------------------------------
+// Data FIFOs with accumulation of triggered data
+//------------------------------------------------------------------------------
+	DataStorageAcc DataFifos (
+		.DataIn(ADCRegDataOut), 
+		.DataOut(StoredDataOut), 
+		.FastTrigger(triggered), 
+		.ReadEnable(adcDataRead), 
+		.WriteClock(ClkADC2DCM), 
+		.ReadClock(clk), 
+		.Reset(~triggerArmed), 
+		.DataReady(DataReadyToSend)
+	);
 
-// Data is recorded either with the serial command "X", or a trigger event
-// and only when there is a lock on the ADC clock.
-// The triggered signal comes from the external trigger
 
-DataStorage Fifos (
-    .DataIn(ADCRegDataOut), //ADCRegDataOut),
-    .DataOut(StoredDataOut), 
-    .WriteStrobe(recordData),
-	 .FastTrigger(triggered),
-    .ReadEnable(adcDataRead), 
-    .WriteClock(ClkADC2DCM), //ClkADC2DCM
-    .ReadClock(clk), 
-    .Reset(~ADCClockOn),
-    .DataValid(DataValid), 
-    .DataReadyToSend(DataReadyToSend),
-	 .State(fifoState),
-	 .ProgFullThresh(ProgFullThresh)
-    );
+//// Data is recorded either with the serial command "X", or a trigger event
+//// and only when there is a lock on the ADC clock.
+//// The triggered signal comes from the external trigger
+//
+//DataStorage Fifos (
+//    .DataIn(ADCRegDataOut), //ADCRegDataOut),
+//    .DataOut(StoredDataOut), 
+//    .WriteStrobe(recordData),
+//	 .FastTrigger(triggered),
+//    .ReadEnable(adcDataRead), 
+//    .WriteClock(ClkADC2DCM), //ClkADC2DCM
+//    .ReadClock(clk), 
+//    .Reset(~ADCClockOn),
+//    .DataValid(DataValid), 
+//    .DataReadyToSend(DataReadyToSend),
+//	 .State(fifoState),
+//	 .ProgFullThresh(ProgFullThresh)
+//    );
 
 
 //------------------------------------------------------------------------------
