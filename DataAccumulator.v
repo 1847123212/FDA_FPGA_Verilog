@@ -32,9 +32,9 @@ module DataAccumulator(
 	
 	parameter ADDER_WIDTH = 16;
 	
-	wire [ADDER_WIDTH-1:0] adderNewData;
-   wire [ADDER_WIDTH-1:0] adderPrevData;
-   wire [ADDER_WIDTH-1:0] adderSum;
+	reg [ADDER_WIDTH-1:0] adderNewData = 16'd0;
+   reg [ADDER_WIDTH-1:0] adderPrevData = 16'd0;
+   reg [ADDER_WIDTH-1:0] adderSum = 16'd0;
 	wire [ADDER_WIDTH-1:0] fifoDataOut;
 	
 	wire eventCounterRst, dataCounterRst;
@@ -49,7 +49,8 @@ module DataAccumulator(
 	
 	//counter to count the number of events captured
 	//this is used to signal when the data should be read out for transmission
-	reg [7:0] eventCounter = 0;
+	reg [7:0] eventCounter = 8'd0;
+	reg wr_en, rd_en;
    
    always @(posedge clk)
       if (eventCounterRst)
@@ -68,12 +69,12 @@ module DataAccumulator(
 			
 	//state machine
 	parameter RESET = 				7'b0000001;
-	parameter FILL_FIFO =			7'b0000010;
+	parameter DELAY_ONE_CLK_RD	=	7'b0000010;
 	parameter WAIT_FOR_EVENT = 	7'b0000100;
-	parameter READ_IN_DATA = 		7'b0001000;
-	parameter INC_EVENT_COUNT = 	7'b0010000;
-	parameter CHECK_EVENT_NUM = 	7'b0100000;
-	parameter READ_OUT_FIFO = 		7'b1000000;
+	parameter READ_FRONT_FIFO = 	7'b0001000;
+	parameter READ_IN_DATA = 		7'b0010000;
+	parameter DELAY_ONE_CLK_WR = 	7'b0100000;
+	parameter INC_EVENT_COUNT = 	7'b1000000;
 	
 	(* FSM_ENCODING="ONE-HOT", SAFE_IMPLEMENTATION="NO" *) reg [6:0] state = RESET;
 
@@ -88,52 +89,83 @@ module DataAccumulator(
                   state <= WAIT_FOR_EVENT;
                else
                   state <= RESET;
+						
+					wr_en <= 1'b0;
+					rd_en <= 1'b0;
             end
             WAIT_FOR_EVENT : begin
-               if (dataCaptureStrobe)
-                  state <= READ_IN_DATA;
-               else
+               if (dataCaptureStrobe) begin //remove f2sempty when done with single event capture
+                  state <= DELAY_ONE_CLK_RD;
+						rd_en <= notFirstEvent;
+					end
+               else begin
                   state <= WAIT_FOR_EVENT;
+						rd_en <= 1'b0;
+					end
+					
+					wr_en <= 1'b0;
             end
+				//We need to read the first element of the fifo to be added to the first data point
+				//i.e. assert read enable, but don't assert write enable for 1 clock cycle
+				DELAY_ONE_CLK_RD: begin
+					state <= READ_FRONT_FIFO;
+					wr_en <= 1'b0;
+					rd_en <= notFirstEvent;
+				end
+				READ_FRONT_FIFO: begin
+					state <= READ_IN_DATA;
+					wr_en <= 1'b1;
+					rd_en <= notFirstEvent;
+				end
             READ_IN_DATA : begin
-               if (dataCounter == 8'd128)	//this value is one less than the fifo size - this allows for
+					wr_en <= 1'b1;
+               if (dataCounter == 8'd125)	begin //This value is one less than the fifo size - this allows for
 														//simultaneous read/writes 
-                  state <= INC_EVENT_COUNT;
-               else
+														//It is also an additional 2 less to write the sum of the previous read and input data 
+                  state <= DELAY_ONE_CLK_WR;
+						rd_en <= 1'b0;
+					end
+               else begin
                   state <= READ_IN_DATA;
+						rd_en <= notFirstEvent;
+					end
             end
+				DELAY_ONE_CLK_WR: begin
+					state <= INC_EVENT_COUNT;
+					wr_en <= 1'b1;
+					rd_en <= 1'b0;
+				end
             INC_EVENT_COUNT : begin
 					state <= WAIT_FOR_EVENT;
+					wr_en <= 1'b0;
+					rd_en <= 1'b0;
             end
-//				CHECK_EVENT_NUM : begin
-//               if (eventCounter == 10'd3) //10'd1023) set to 3 for SIM
-//                  state <= READ_OUT_FIFO;
-//               else
-//                  state <= WAIT_FOR_EVENT;
-//            end
-//				READ_OUT_FIFO : begin
-//               if (fifoEmpty)
-//                  state <= RESET;
-//               else
-//                  state <= READ_OUT_FIFO;
-//            end
          endcase
 	
-	wire wr_en = (state == READ_IN_DATA);
-	wire rd_en = (state == READ_IN_DATA) & notFirstEvent;
 	assign fifoRst = rst | (state == RESET);
 	assign dataOut = f2sDataOut;
 	assign dataReadyToRead = ~f2sEmpty;
 	assign dataCounterEn = (state == READ_IN_DATA);
 	assign eventCounterEn = (state == INC_EVENT_COUNT);
 	assign dataCounterRst = (state == RESET) | (state == INC_EVENT_COUNT);
-	assign eventCounterRst = (state == RESET) | ((state == INC_EVENT_COUNT) & (eventCounter == 8'd50)); 
+	assign eventCounterRst = (state == RESET) | ((state == INC_EVENT_COUNT) & (eventCounter == 8'd255)); //(eventCounter == 8'd255)
 	
-	assign adderNewData = {8'b0, inputData};
-	assign adderPrevData = fifoDataOut;
-   assign adderSum = (eventCounter == 8'd0) ? adderNewData : adderNewData + adderPrevData;
+	always@(posedge clk)
+		adderNewData <= {8'b0, inputData};
 	
-	assign f2sWrEn = (state == READ_IN_DATA) & (eventCounter == 16'd0) & notFirstEvent;
+	always@(posedge clk)
+		if(eventCounter == 8'd0)
+			adderPrevData <= 16'd0;
+		else
+			adderPrevData <= fifoDataOut;
+			
+//	assign adderPrevData = fifoDataOut; //(eventCounter == 8'd0) ? 16'd0 : fifoDataOut;
+//   assign adderSum = (eventCounter == 8'd0) ? adderNewData : adderNewData + adderPrevData;
+	always@(posedge clk)
+		adderSum <= adderNewData + adderPrevData;
+		
+	reg bufNotFirstEvent = 0;	
+	assign f2sWrEn = ((state == READ_IN_DATA) | (state == READ_FRONT_FIFO) | (state == DELAY_ONE_CLK_RD)) & (eventCounter == 8'd0) & bufNotFirstEvent;
 	assign dataEmpty = f2sEmpty;
 	assign f2sRdEn = dataRead;
 	
@@ -143,6 +175,12 @@ module DataAccumulator(
 			notFirstEvent <= 0;
 		else if (state == INC_EVENT_COUNT)
 			notFirstEvent <= 1;
+			
+	always @(posedge clk) 
+		if(state == RESET)
+			bufNotFirstEvent <= 0;
+		else
+			bufNotFirstEvent <= notFirstEvent;
 	
 	
 	//fifo write depth is 128

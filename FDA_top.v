@@ -93,6 +93,10 @@ wire [7:0] StoredDataOut;
 	
 	assign ClearData = 1'b0;
 	
+	reg [7:0] eod = 8'b0;
+	reg eodWr = 1'b0;
+	reg [2:0] dataRTSBuf = 3'b0; 
+	
 	RxDWrapper RxD (
 		 .Clock(clk), 
 		 .ClearData(ClearData), 
@@ -105,14 +109,31 @@ wire [7:0] StoredDataOut;
 		 .Clock(clk), 
 		 .Reset(1'b0), 
 		 .ADCData(StoredDataOut), 
-		 .generalData(txData), 
-		 .generalDataWrite(txDataWr), 
+		 .generalData(txData | eod), 
+		 .generalDataWrite(txDataWr | eodWr), 
 		 .adcDataStreamingMode(DataReadyToSend),  //input equal to adc fifo not empty
 		 .adcDataValid(DataReadyToSend), 			//input to UART Start signal
 		 .adcDataStrobe(adcDataRead),					//output to adc FIFO 
 		 .SDO(USB_RS232_TXD)
 		 );
-	
+
+/**	
+	always@(posedge clk) begin
+		dataRTSBuf <= {dataRTSBuf[1:0], DataReadyToSend};
+		if(dataRTSBuf == 3'b110) begin
+			eod  <= 8'd255;
+			eodWr <= 1'b1;	
+		end
+		else if(dataRTSBuf == 3'b100)  begin
+			eod  <= 8'd255;
+			eodWr <= 1'b1;	
+		end
+		else begin
+			eod  <= 8'd0;
+			eodWr <= 1'b0;	
+		end
+	end
+**/	
 `endif
 
 wire recordData, adcPwrOn;
@@ -196,7 +217,7 @@ TriggerControl TriggerController (
     .clk(ClkADC2DCM),
     .t_p(DATA_TRIGGER_P),
     .t_n(DATA_TRIGGER_N),
-    .armed(triggerArmed),						//trigger is de-armed when storing or sending data				 
+    .armed(triggerArmed),				 
     .module_reset(~ADCClockOn),
 	 .manual_reset(triggerReset), 
     .auto_reset(autoTriggerReset), 

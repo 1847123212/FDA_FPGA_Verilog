@@ -26,7 +26,7 @@ parameter Baud = 921600;
 //endgenerate
 
 ////////////////////////////////
-`ifdef SIMULATION
+`ifdef XILINX_ISIM 
 wire BitTick = 1'b1;  // output one bit per clock cycle
 `else
 wire BitTick;
@@ -94,7 +94,7 @@ parameter Oversampling = 8;  // usually 8 or 16 (needs to be a power of 2)
 ////////////////////////////////
 reg [3:0] RxD_state = 0;
 
-`ifdef SIMULATION
+`ifdef XILINX_ISIM 
 wire RxD_bit = RxD;
 wire sampleNow = 1'b1;  // receive one bit per clock cycle
 
@@ -133,7 +133,7 @@ wire sampleNow = OversamplingTick && (OversamplingCnt==Oversampling/2-1);
 // now we can accumulate the RxD bits in a shift-register
 always @(posedge clk)
 case(RxD_state)
-	4'b0000: if(~RxD_bit) RxD_state <= `ifdef SIMULATION 4'b1000 `else 4'b0001 `endif;  // start bit found?
+	4'b0000: if(~RxD_bit) RxD_state <= `ifdef XILINX_ISIM  4'b1000 `else 4'b0001 `endif;  // start bit found?
 	4'b0001: if(sampleNow) RxD_state <= 4'b1000;  // sync start bit to sampleNow
 	4'b1000: if(sampleNow) RxD_state <= 4'b1001;  // bit 0
 	4'b1001: if(sampleNow) RxD_state <= 4'b1010;  // bit 1

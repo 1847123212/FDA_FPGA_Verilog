@@ -33,7 +33,7 @@ module DATA_ACCUMULATOR_TB;
 
 	// Outputs
 	wire dataReadyToRead, dataEmpty;
-	wire [17:0] dataOut;
+	wire [15:0] dataOut;
 
 	// Instantiate the Unit Under Test (UUT)
 	DataAccumulator uut (

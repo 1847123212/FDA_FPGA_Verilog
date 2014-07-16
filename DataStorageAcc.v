@@ -45,9 +45,9 @@ module DataStorageAcc(
 	
 	
 	//Wait until data is available on all fifos
-	wire dataReadyFromAcc = dataReadyToReadDI & dataReadyToReadDID & dataReadyToReadDQ & dataReadyToReadDQD;
+	wire dataReadyFromAcc = dataReadyToReadDI | dataReadyToReadDID | dataReadyToReadDQ | dataReadyToReadDQD;
 	
-	reg [9:0] readCounts = 0; //this is 10 bits - 512 data points * 2 bytes each
+	reg [10:0] readCounts = 11'd0; //this is 10 bits - 512 data points * 2 bytes each
 	
 	always@(posedge ReadClock) begin
 		DataReady <= (state != WAIT_TO_TRANSMIT);
@@ -63,7 +63,7 @@ module DataStorageAcc(
 	
 	reg dqRd = 0, dqdRd = 0, diRd = 0, didRd = 0;
 	
-	wire fsmReset = (readCounts == 10'b1111111111) | Reset;
+	wire fsmReset = (readCounts == 11'd1024) | Reset;  //1024
 	
 	//note: the read signals should only pulse high for 1 clock cycle
 	//after the current data has already been read
