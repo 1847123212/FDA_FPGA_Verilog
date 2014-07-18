@@ -109,7 +109,7 @@ module DataAccumulator(
 				//i.e. assert read enable, but don't assert write enable for 1 clock cycle
 				DELAY_ONE_CLK_RD: begin
 					state <= READ_FRONT_FIFO;
-					wr_en <= 1'b1;
+					wr_en <= 1'b0;
 					rd_en <= notFirstEvent;
 				end
 				READ_FRONT_FIFO: begin
@@ -119,7 +119,7 @@ module DataAccumulator(
 				end
             READ_IN_DATA : begin
 					wr_en <= 1'b1;
-               if (dataCounter == 8'd125)	begin //This value is one less than the fifo size - this allows for
+               if (dataCounter == 8'd124)	begin //This value is one less than the fifo size - this allows for
 														//simultaneous read/writes 
 														//It is also an additional 2 less to write the sum of the previous read and input data 
                   state <= DELAY_ONE_CLK_WR;
@@ -133,7 +133,7 @@ module DataAccumulator(
 				DELAY_ONE_CLK_WR: begin
 					state <= INC_EVENT_COUNT;
 					wr_en <= 1'b1;
-					rd_en <= notFirstEvent;
+					rd_en <= 1'b0;
 				end
             INC_EVENT_COUNT : begin
 					state <= WAIT_FOR_EVENT;
