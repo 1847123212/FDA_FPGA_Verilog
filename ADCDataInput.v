@@ -39,7 +39,12 @@ module ADCDataInput(
     ////------------------------------
     // Instantiate a buffer for every bit of the data bus
 	 
-	 if(pin_count  < 16)
+	 
+	 //Two things are going on in this if statement
+	 //1) Some of the LVDS lines are inverted - these are pins data lines 16-31
+	 //2) We need to invert the most significanat bit of each byte to convert from
+	 //binary offset to 2s complement.
+	 if((pin_count < 15 && pin_count != 7) || (pin_count == 23) || (pin_count == 31))             //(pin_count  < 16)
 		IBUFDS_DIFF_OUT #(
 			.DIFF_TERM("TRUE"),   // Differential Termination, "TRUE"/"FALSE" 
 			.IOSTANDARD("LVDS_33") // Specify the input I/O standard

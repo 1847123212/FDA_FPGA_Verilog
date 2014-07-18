@@ -148,7 +148,7 @@ module DataAccumulator(
 	assign dataCounterEn = (state == READ_IN_DATA);
 	assign eventCounterEn = (state == INC_EVENT_COUNT);
 	assign dataCounterRst = (state == RESET) | (state == INC_EVENT_COUNT);
-	assign eventCounterRst = (state == RESET) | ((state == INC_EVENT_COUNT) & (eventCounter == 8'd3)); //(eventCounter == 8'd255)
+	assign eventCounterRst = (state == RESET) | ((state == INC_EVENT_COUNT) & (eventCounter == 8'd255)); //(eventCounter == 8'd255)
 	
 	localparam signed [7:0] MIDVALUE = 8'd0;
 		
