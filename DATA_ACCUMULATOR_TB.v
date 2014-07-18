@@ -26,14 +26,15 @@ module DATA_ACCUMULATOR_TB;
 
 	// Inputs
 	reg clk, clkSlow;
-	reg [7:0] inputData;
+	reg signed [7:0] inputData;
 	reg dataCaptureStrobe;
 	reg dataRead;
 	reg rst;
+	reg capturingData;
 
 	// Outputs
 	wire dataReadyToRead, dataEmpty;
-	wire [15:0] dataOut;
+	wire signed [15:0] dataOut;
 
 	// Instantiate the Unit Under Test (UUT)
 	DataAccumulator uut (
@@ -61,10 +62,14 @@ module DATA_ACCUMULATOR_TB;
 		// Add stimulus here
 
 	end
+
+	reg goingDown;
       
 	always@(posedge clk) begin
-		if(dataCaptureStrobe)
-			inputData <= 8'd0;
+		if(~capturingData)
+			inputData <= -8'd3;
+		else if(goingDown)
+			inputData <= inputData - 1;
 		else
 			inputData <= inputData + 1;
 	end
@@ -93,9 +98,15 @@ module DATA_ACCUMULATOR_TB;
 		
 	initial begin
 		dataCaptureStrobe = 0;
+		capturingData = 0;
+		goingDown = 1;
 		forever begin
-			#1000 dataCaptureStrobe = 1;
+			#1002 dataCaptureStrobe = 1;
+			capturingData = 1;
+			goingDown = 1;
 			#4 dataCaptureStrobe = 0;
+			#40 goingDown = 0;
+			#468 capturingData = 0;
 		end
 	end
 endmodule
