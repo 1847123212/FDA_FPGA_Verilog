@@ -34,6 +34,8 @@ module DATA_STORAGE_ACC_TB;
 	// Outputs
 	wire [7:0] DataOut;
 	wire DataReady, ReadEnable;
+	wire [7:0] gDataOut;
+	wire GenStrobe;
 	
 	// Instantiate the Unit Under Test (UUT)
 	TxDWrapper UUT2 (
@@ -58,7 +60,9 @@ module DATA_STORAGE_ACC_TB;
 		.WriteClock(WriteClock), 
 		.ReadClock(ReadClock), 
 		.Reset(Reset), 
-		.DataReady(DataReady)
+		.DataReady(DataReady),
+		.gDataOut(gDataOut),
+		.GenStrobe(GenStrobe)
 	);
 
 	initial begin

@@ -19,7 +19,7 @@ module async_transmitter(
 	output TxD_busy
 );
 parameter ClkFrequency = 100000000;	// 100MHz
-parameter Baud = 921600;
+parameter Baud = 3000000; //921600;
 
 //generate
 //	if(ClkFrequency<Baud*8 && (ClkFrequency % Baud!=0)) ASSERTION_ERROR PARAMETER_OUT_OF_RANGE("Frequency can't generate Baud rate");
@@ -81,7 +81,7 @@ module async_receiver(
 //	output reg RxD_endofpacket = 0  // asserted for one clock cycle when a packet has been detected (i.e. RxD_idle is going high)
 );
 parameter ClkFrequency = 100000000; // changed to 100MHz
-parameter Baud = 921600;
+parameter Baud = 3000000;
 parameter Oversampling = 8;  // usually 8 or 16 (needs to be a power of 2)
 // we oversample the RxD line at a fixed rate to capture each RxD data bit at the "right" time
 // 8 times oversampling by default, use 16 for higher quality reception
@@ -179,7 +179,7 @@ module BaudTickGen(
 	output tick  // generate a tick at the specified baud rate * oversampling
 );
 parameter ClkFrequency = 100000000;
-parameter Baud = 921600;
+parameter Baud = 3000000;
 parameter Oversampling = 1;
 
 function integer log2(input integer v); begin log2=0; while(v>>log2) log2=log2+1; end endfunction

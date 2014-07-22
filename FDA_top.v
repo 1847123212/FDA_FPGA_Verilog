@@ -93,9 +93,8 @@ wire [7:0] StoredDataOut;
 	
 	assign ClearData = 1'b0;
 	
-	reg [7:0] eod = 8'b0;
-	reg eodWr = 1'b0;
-	reg [2:0] dataRTSBuf = 3'b0; 
+	wire [7:0] eod;
+	wire eodWr;
 	
 	RxDWrapper RxD (
 		 .Clock(clk), 
@@ -117,23 +116,6 @@ wire [7:0] StoredDataOut;
 		 .SDO(USB_RS232_TXD)
 		 );
 
-/**	
-	always@(posedge clk) begin
-		dataRTSBuf <= {dataRTSBuf[1:0], DataReadyToSend};
-		if(dataRTSBuf == 3'b110) begin
-			eod  <= 8'd255;
-			eodWr <= 1'b1;	
-		end
-		else if(dataRTSBuf == 3'b100)  begin
-			eod  <= 8'd255;
-			eodWr <= 1'b1;	
-		end
-		else begin
-			eod  <= 8'd0;
-			eodWr <= 1'b0;	
-		end
-	end
-**/	
 `endif
 
 wire recordData, adcPwrOn;
@@ -387,7 +369,9 @@ wire waitForTrigger, holdTrigger;
 		.WriteClock(ClkADC2DCM), 
 		.ReadClock(clk), 
 		.Reset(~triggerArmed), 
-		.DataReady(DataReadyToSend)
+		.DataReady(DataReadyToSend),
+		.gDataOut(eod), 
+		.GenStrobe(eodWr)
 	);
 
 

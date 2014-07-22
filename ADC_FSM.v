@@ -89,6 +89,7 @@ module ADC_FSM(
 	assign OutSelect = (OutToADCEnable) ? Select : 1'bz;
 	
 	//OutPD 
+	//Trying with always low - need to change to be able to put in low power mode
 	assign OutPD = ((~OutToADCEnable) | (CurrentState == ALL_PWR_OFF | CurrentState == LOW_PWR_IDLE 
 							| CurrentState == ADC_PWR_WARMUP | CurrentState == ANALOG_PWR_WARMUP)) ? 1'bz : 1'b0;
 	

@@ -26,16 +26,63 @@ module DataStorageAcc(
     input WriteClock,
     input ReadClock,
     input Reset,
-    output reg DataReady = 0
+    output reg DataReady = 0,
+	 output [7:0] gDataOut,
+	 output reg GenStrobe = 0
     );
 
 
 	reg byteNumber; //read high (1) or low byte (0) 
-	reg [3:0] fifoNumber = 4'b0001; 
+	reg [3:0] fifoNumber = 4'b0001;
+	reg [7:0] GenDataOut = 8'b0;
 	wire [15:0] dataOutDQD;
 	wire [15:0] dataOutDID;
 	wire [15:0] dataOutDQ;
 	wire [15:0] dataOutDI;
+	
+	reg [10:0] readCounts = 11'd0; //this is 10 bits - 512 data points * 2 bytes each
+	
+	assign gDataOut = GenDataOut;
+	
+	
+	wire sendEOD = (readCounts == 11'd1024);
+	//state machine for sending "end-of-data" bytes
+	parameter WAIT_FOR_END  = 4'b0001;
+	parameter END1				= 4'b0010;
+	parameter PAUSE 			= 4'b0100;
+	parameter END2				= 4'b1000;
+	
+	//TO DO I should probably implement 4 end bytes with the 3rd and 4th the opposite order of 1 and 2
+	
+	(* FSM_ENCODING="ONE-HOT", SAFE_IMPLEMENTATION="NO" *) reg [3:0] eofState = WAIT_FOR_END;
+	always@(posedge ReadClock) begin
+		(* FULL_CASE, PARALLEL_CASE *) case (eofState)
+		WAIT_FOR_END:begin
+			GenStrobe <= 1'b0;
+			GenDataOut <= 8'b00000000;
+			if(sendEOD)
+				eofState <= END1;
+			else
+				eofState <= WAIT_FOR_END;
+		end
+		END1: begin
+			eofState <= PAUSE;
+			GenDataOut <= 8'b10000000;
+			GenStrobe <= 1'b1;
+		end
+		PAUSE:begin
+			eofState <= END2;
+			GenDataOut <= 8'b00000000;
+			GenStrobe <= 1'b0;
+		end
+		END2: begin
+			eofState <= WAIT_FOR_END;
+			GenDataOut <= 8'b00000001;
+			GenStrobe <= 1'b1;
+		end
+		endcase
+	end
+	
 	
 	parameter WAIT_TO_TRANSMIT = 5'b00001;
 	parameter DQD_READ		= 5'b00010;
@@ -47,7 +94,6 @@ module DataStorageAcc(
 	//Wait until data is available on all fifos
 	wire dataReadyFromAcc = dataReadyToReadDI | dataReadyToReadDID | dataReadyToReadDQ | dataReadyToReadDQD;
 	
-	reg [10:0] readCounts = 11'd0; //this is 10 bits - 512 data points * 2 bytes each
 	
 	always@(posedge ReadClock) begin
 		DataReady <= (state != WAIT_TO_TRANSMIT);

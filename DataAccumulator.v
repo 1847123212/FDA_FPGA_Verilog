@@ -30,6 +30,12 @@ module DataAccumulator(
 	 output signed [15:0] dataOut
     );
 	
+	`ifdef XILINX_ISIM 
+	parameter NUM_EVENTS = 8'd3;
+	`else
+	parameter NUM_EVENTS = 8'd255;
+	`endif
+	
 	parameter ADDER_WIDTH = 16;
 	
 	reg signed [ADDER_WIDTH-1:0] adderNewData = 16'd0;
@@ -148,7 +154,7 @@ module DataAccumulator(
 	assign dataCounterEn = (state == READ_IN_DATA);
 	assign eventCounterEn = (state == INC_EVENT_COUNT);
 	assign dataCounterRst = (state == RESET) | (state == INC_EVENT_COUNT);
-	assign eventCounterRst = (state == RESET) | ((state == INC_EVENT_COUNT) & (eventCounter == 8'd255)); //(eventCounter == 8'd255)
+	assign eventCounterRst = (state == RESET) | ((state == INC_EVENT_COUNT) & (eventCounter == NUM_EVENTS)); //(eventCounter == 8'd255)
 	
 	localparam signed [7:0] MIDVALUE = 8'd0;
 		
