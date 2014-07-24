@@ -31,6 +31,7 @@ module TRIGGER_CONTROL_TB;
 	reg armed;
 	reg module_reset;
 	reg manual_reset;
+	reg manual_trigger;
 	reg auto_reset;
 
 	// Outputs
@@ -46,8 +47,9 @@ module TRIGGER_CONTROL_TB;
 		.armed(armed), 
 		.module_reset(module_reset), 
 		.manual_reset(manual_reset), 
-		.auto_reset(auto_reset), 
-		.triggered(triggered), 
+		.auto_reset(auto_reset),
+		.manual_trigger(manual_trigger),
+		.triggered_out(triggered), 
 		.comp_reset_high(comp_reset_high), 
 		.comp_reset_low(comp_reset_low)
 	);
@@ -60,7 +62,8 @@ module TRIGGER_CONTROL_TB;
 		module_reset = 1;
 		manual_reset = 0;
 		auto_reset = 0;
-
+		manual_trigger = 0;
+		
 		// Wait 100 ns for global reset to finish
 		#100;
 		module_reset = 0;
@@ -69,7 +72,7 @@ module TRIGGER_CONTROL_TB;
 		t_n = 0;
 		#12
 		manual_reset = 1;
-		#4
+		#10
 		manual_reset = 0;
 		#12
 		t_p = 0;

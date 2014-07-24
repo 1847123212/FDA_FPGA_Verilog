@@ -9,7 +9,12 @@
 // Project Name: 
 // Target Devices: 
 // Tool versions: 
-// Description: 
+// Description: TriggerControl handles the external input trigger and creates a 
+//	synchronized trigger signal usable by the FPGA logic.
+//	Two FSMs handle the module behavior. The first is for actually reading in the
+//	the external signal, and resetting the external comparator.
+//	The second is used to decide if the received trigger signal should be passed
+//	from the module to any external modules.
 //
 // Dependencies: 
 //
@@ -26,59 +31,90 @@ module TriggerControl(
 	 input module_reset,
 	 input manual_reset,
 	 input auto_reset,
-    output triggered,
+	 input manual_trigger,	//"artificial" trigger
+    output triggered_out,
     output comp_reset_high,
-    output comp_reset_low,
-	 output [3:0] state_w
+    output comp_reset_low
     );
 
-	wire t_out, manual_reset_sync;
+	wire t_out, manual_rst_sync, auto_rst_sync, armed_sync, manual_trigger_sync;
 	wire reset_signal;
 	
-	//State machine for trigger
-	
-	parameter IDLE = 4'b0001;
-	parameter ARMED = 4'b0010;
-	parameter TRIGGERED = 4'b0100;
-	parameter RESET = 4'b1000;
+	//State machine for external trigger
+	parameter IDLE = 				4'b0001;
+	parameter TRIGGERED = 		4'b0010;
+	parameter RESET = 			4'b0100;
+	parameter CHECK_FOR_RST = 	4'b1000;
 
 	(* FSM_ENCODING="ONE-HOT", SAFE_IMPLEMENTATION="NO" *) reg [3:0] state = IDLE;
 	always@(posedge clk or posedge module_reset)
       if (module_reset) begin
-         state <= IDLE;
+         state <= CHECK_FOR_RST;
       end
       else
          (* FULL_CASE, PARALLEL_CASE *) case (state)
-            IDLE : begin
-               if (armed)
-                  state <= ARMED;
-					else if (manual_reset_sync)
-						state <= RESET;
-               else
-                  state <= IDLE;
-            end
-            ARMED : begin
+            IDLE:
                if (triggered)
                   state <= TRIGGERED;
-					else if (armed == 1'b0)
-						state <= IDLE;
                else
-                  state <= ARMED;
-            end
-            TRIGGERED : begin
-               if (triggerCounter[2] & (manual_reset_sync | auto_reset))
+                  state <= IDLE;
+            TRIGGERED:
+               if (triggerCounter[2])
                   state <= RESET;
                else
                   state <= TRIGGERED;
-            end
-            RESET : begin
+            RESET: begin
 					state <= IDLE;
             end
+				CHECK_FOR_RST: begin
+					if(t_out)
+						state <= RESET;
+					else
+						state <= IDLE;
+				end
          endcase
 
-	assign state_w = state;
 
-	// use triggerCounter to delay the trigger reset by 4 clock cycles
+	//Second FSM to determine if trigger is enabled
+	parameter OFF = 				3'b001;
+	parameter T_EN = 				3'b010;
+	parameter WAIT_FOR_RST = 	3'b100;
+	
+	reg trig_out_en = 1'b0;	//this could just be implemented as teState[1]
+	
+	(* FSM_ENCODING="ONE-HOT", SAFE_IMPLEMENTATION="NO" *) reg [2:0] teState = OFF;
+	always@(posedge clk)
+		(* FULL_CASE, PARALLEL_CASE *) case (teState)
+		OFF: begin
+			trig_out_en <= 1'b0;
+			if(armed_sync & ~triggered)	//include ~triggered so that we can just test for triggered in T_EN
+				teState <= T_EN;
+			else
+				teState <= OFF;
+		end
+		T_EN: begin
+			trig_out_en <= 1'b1;
+			if(triggered)
+				if(auto_rst_sync)
+					teState <= OFF;	//go back to off to check if has been de-armed, and wait for trigger to de-assert	
+				else
+					teState <= WAIT_FOR_RST;
+			else if(~armed_sync)			//if trigger is de-armed before receiving trigger signal
+				teState <= OFF;
+			else
+				teState <= T_EN;
+		end
+		WAIT_FOR_RST: begin
+			trig_out_en <= 1'b0;
+			if(manual_rst_sync | ~armed_sync)
+				teState <= OFF;
+			else
+				teState <= WAIT_FOR_RST;
+		end
+		endcase
+
+	// Use triggerCounter to delay the trigger reset by 4 clock cycles 
+	// Do this so that we don't re-trigger on the same signal input trigger immediately 
 	reg [2:0] triggerCounter = 3'b1;
 	always@(posedge clk) begin
 		if(state != TRIGGERED)
@@ -87,16 +123,16 @@ module TriggerControl(
 			triggerCounter <= triggerCounter + 1;
 	end
 
-	//trigger input logic to synchronize signal
-	(* ASYNC_REG="TRUE" *) reg [1:0] sreg;                                                                           
+	//Trigger input logic to synchronize signal
+	//We have plenty of time because of the ADC 30 ns buffer
+	//so double buffer
+	(* ASYNC_REG="TRUE" *) reg [2:0] sreg = 3'b000;                                                                           
    always @(posedge clk) begin
-		if(state != ARMED)
-			sreg <= 2'b00;
-		else
-			sreg <= {sreg[0], t_out};
+		sreg <= {sreg[1:0], t_out};
    end
 
-	assign triggered = sreg[1];
+	assign triggered = sreg[2]; 
+	assign triggered_out = (sreg[2] & trig_out_en) | manual_trigger_sync;	//only allow output trigger if enabled
 
 	// Logic for for trigger reset
 	// The trigger reset lines should only ever be asserted if
@@ -104,10 +140,29 @@ module TriggerControl(
 	// reset_signal is asserted LOW to do reset - that is why the logic is inverted
 	assign reset_signal =  ~((state == RESET) & t_out);
 	
+	//Cross clock domain synchronization for "slow" input signals
 	async_input_sync manual_reset_sync_module (
     .clk(clk), 
     .async_in(manual_reset), 
     .sync_out(manual_reset_sync)
+    );
+	 
+	 async_input_sync auto_reset_sync_module (
+    .clk(clk), 
+    .async_in(auto_reset), 
+    .sync_out(auto_reset_sync)
+    );
+
+	 async_input_sync armed_sync_module (
+    .clk(clk), 
+    .async_in(armed), 
+    .sync_out(armed_sync)
+    );
+	 
+	 async_input_sync manual_trig_sync_module (
+    .clk(clk), 
+    .async_in(manual_trigger), 
+    .sync_out(manual_trigger_sync)
     );
 
 	IBUFDS #(
