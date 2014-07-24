@@ -74,11 +74,17 @@ module DATA_ACCUMULATOR_TB;
 			inputData <= inputData + 1;
 	end
 
-	always@(posedge clk)
+	always@(posedge clkSlow)
 		if(~dataReadyToRead)
 			dataRead <= 0;
-		else 
-			dataRead <= 1;
+		else if(drCount == 3'd0)
+				dataRead <= 1;
+			else
+				dataRead <= 0;
+			
+	reg [2:0] drCount = 3'd0;
+	always@(posedge clkSlow)
+		drCount <= drCount + 1;
 		
 	initial begin
 	  clk = 0;

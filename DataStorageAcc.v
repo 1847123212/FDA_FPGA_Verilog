@@ -28,7 +28,8 @@ module DataStorageAcc(
     input Reset,
     output reg DataReady = 0,
 	 output [7:0] gDataOut,
-	 output reg GenStrobe = 0
+	 output reg GenStrobe = 0,
+	 input [7:0] NumToAdd
     );
 
 
@@ -42,53 +43,15 @@ module DataStorageAcc(
 	
 	reg [10:0] readCounts = 11'd0; //this is 10 bits - 512 data points * 2 bytes each
 	
-	assign gDataOut = GenDataOut;
-	
-	
-	wire sendEOD = (readCounts == 11'd1024);
-	//state machine for sending "end-of-data" bytes
-	parameter WAIT_FOR_END  = 4'b0001;
-	parameter END1				= 4'b0010;
-	parameter PAUSE 			= 4'b0100;
-	parameter END2				= 4'b1000;
-	
-	//TO DO I should probably implement 4 end bytes with the 3rd and 4th the opposite order of 1 and 2
-	
-	(* FSM_ENCODING="ONE-HOT", SAFE_IMPLEMENTATION="NO" *) reg [3:0] eofState = WAIT_FOR_END;
-	always@(posedge ReadClock) begin
-		(* FULL_CASE, PARALLEL_CASE *) case (eofState)
-		WAIT_FOR_END:begin
-			GenStrobe <= 1'b0;
-			GenDataOut <= 8'b00000000;
-			if(sendEOD)
-				eofState <= END1;
-			else
-				eofState <= WAIT_FOR_END;
-		end
-		END1: begin
-			eofState <= PAUSE;
-			GenDataOut <= 8'b10000000;
-			GenStrobe <= 1'b1;
-		end
-		PAUSE:begin
-			eofState <= END2;
-			GenDataOut <= 8'b00000000;
-			GenStrobe <= 1'b0;
-		end
-		END2: begin
-			eofState <= WAIT_FOR_END;
-			GenDataOut <= 8'b00000001;
-			GenStrobe <= 1'b1;
-		end
-		endcase
-	end
-	
-	
-	parameter WAIT_TO_TRANSMIT = 5'b00001;
-	parameter DQD_READ		= 5'b00010;
-	parameter DID_READ		= 5'b00100;
-	parameter DQ_READ			= 5'b01000;
-	parameter DI_READ 		= 5'b10000;
+	parameter WAIT_TO_TRANSMIT = 9'b000000001;
+	parameter START1				= 9'b000000010;
+	parameter START2				= 9'b000000100;
+	parameter DQD_READ			= 9'b000001000;
+	parameter DID_READ			= 9'b000010000;
+	parameter DQ_READ				= 9'b000100000;
+	parameter DI_READ 			= 9'b001000000;
+	parameter END1					= 9'b010000000;
+	parameter END2					= 9'b100000000;
 	
 	
 	//Wait until data is available on all fifos
@@ -109,14 +72,12 @@ module DataStorageAcc(
 	
 	reg dqRd = 0, dqdRd = 0, diRd = 0, didRd = 0;
 	
-	wire fsmReset = (readCounts == 11'd1024) | Reset;  //1024
-	
 	//note: the read signals should only pulse high for 1 clock cycle
 	//after the current data has already been read
 	
-	(* FSM_ENCODING="ONE-HOT", SAFE_IMPLEMENTATION="NO" *) reg [4:0] state = WAIT_TO_TRANSMIT;
+	(* FSM_ENCODING="ONE-HOT", SAFE_IMPLEMENTATION="NO" *) reg [8:0] state = WAIT_TO_TRANSMIT;
 	always@(posedge ReadClock)
-      if (fsmReset) begin
+      if (Reset) begin
          state <= WAIT_TO_TRANSMIT;
       end
       else
@@ -127,9 +88,33 @@ module DataStorageAcc(
 				diRd  <= 0;
 				didRd <= 0;
 				if(dataReadyFromAcc)
-					state <= DQD_READ;
+					state <= START1;
 				else
 					state <=WAIT_TO_TRANSMIT;
+			end
+			START1: begin
+				DataOut <= 8'b10000000;
+				dqRd  <= 0;
+				dqdRd <= 0;
+				diRd  <= 0;
+				didRd <= 0;
+				if(ReadEnable) begin
+					state <= START2;
+				end
+				else begin
+					state <=START1;
+				end
+			end
+			START2: begin
+				DataOut <= 8'b00000010;
+				dqRd  <= 0;
+				dqdRd <= 0;
+				diRd  <= 0;
+				didRd <= 0;
+				if(ReadEnable)
+					state <= DQD_READ;
+				else
+					state <=START2;
 			end
 			DQD_READ: begin
 				dqRd  <= 0;
@@ -188,10 +173,13 @@ module DataStorageAcc(
 				dqdRd <= 0;
 				dqRd  <= 0;
 				didRd <= 0;
-				
+
 				if(ReadEnable & (byteNumber)) begin
-					state <= DQD_READ;	//move to next state
 					diRd <= 1;
+					if(readCounts == 11'd1024 || readCounts == 11'd1024)	//not sure which is right
+						state<=END1;
+					else
+						state <= DQD_READ;	//move to next state
 				end
 				else begin
 					state <=DI_READ; 	//stay at this state
@@ -202,6 +190,34 @@ module DataStorageAcc(
 					DataOut <= dataOutDI[7:0];
 				else
 					DataOut <= dataOutDI[15:8];
+			end
+			END1: begin
+				DataOut <= 8'b10000000;
+				if(ReadEnable) begin
+					state <= END2;
+					dqRd  <= 1;
+					dqdRd <= 1;
+					diRd  <= 1;
+					didRd <= 1;
+				end
+				else begin
+					state <=END1;
+					dqRd  <= 0;
+					dqdRd <= 0;
+					diRd  <= 0;
+					didRd <= 0;
+				end
+			end
+			END2: begin
+				DataOut <= 8'b00000001;
+				dqRd  <= 0;
+				dqdRd <= 0;
+				diRd  <= 0;
+				didRd <= 0;
+				if(ReadEnable)
+					state <= WAIT_TO_TRANSMIT;
+				else
+					state <=END2;
 			end
 		endcase
 			

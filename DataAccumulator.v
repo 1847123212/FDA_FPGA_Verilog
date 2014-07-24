@@ -31,9 +31,9 @@ module DataAccumulator(
     );
 	
 	`ifdef XILINX_ISIM 
-	parameter NUM_EVENTS = 8'd3;
+	parameter NUM_EVENTS = 8'd1;
 	`else
-	parameter NUM_EVENTS = 8'd255;
+	parameter NUM_EVENTS = 8'd1; //d255;	//need to make this programmable
 	`endif
 	
 	parameter ADDER_WIDTH = 16;
@@ -74,15 +74,17 @@ module DataAccumulator(
          dataCounter <= dataCounter + 1;
 
 	//state machine
-	parameter RESET = 				7'b0000001;
-	parameter DELAY_ONE_CLK_RD	=	7'b0000010;
-	parameter WAIT_FOR_EVENT = 	7'b0000100;
-	parameter READ_FRONT_FIFO = 	7'b0001000;
-	parameter READ_IN_DATA = 		7'b0010000;
-	parameter DELAY_ONE_CLK_WR = 	7'b0100000;
-	parameter INC_EVENT_COUNT = 	7'b1000000;
+	parameter RESET = 				9'b000000001;
+	parameter WAIT_FOR_EVENT = 	9'b000000010;
+	parameter DELAY_ONE_CLK_RD	=	9'b000000100;
+	parameter READ_FRONT_FIFO = 	9'b000001000;
+	parameter READ_IN_DATA = 		9'b000010000;
+	parameter DELAY_ONE_CLK_WR = 	9'b000100000;
+	parameter INC_EVENT_COUNT = 	9'b001000000;
+	parameter CHECK_NEXT_STATE =	9'b010000000;
+	parameter RST_EVENT_COUNT =	9'b100000000;
 	
-	(* FSM_ENCODING="ONE-HOT", SAFE_IMPLEMENTATION="NO" *) reg [6:0] state = RESET;
+	(* FSM_ENCODING="ONE-HOT", SAFE_IMPLEMENTATION="NO" *) reg [8:0] state = RESET;
 
 	always@(posedge clk)
       if (rst) begin
@@ -142,10 +144,22 @@ module DataAccumulator(
 					rd_en <= 1'b0;
 				end
             INC_EVENT_COUNT : begin
-					state <= WAIT_FOR_EVENT;
+					state <= CHECK_NEXT_STATE;
 					wr_en <= 1'b0;
 					rd_en <= 1'b0;
             end
+				CHECK_NEXT_STATE : begin
+					if(eventCounter == NUM_EVENTS)
+						if(f2sEmpty)
+							state <= RST_EVENT_COUNT;
+						else
+							state <= CHECK_NEXT_STATE; //stay here until the f2s buffer has been read out
+					else
+						state <= WAIT_FOR_EVENT;
+				end
+				RST_EVENT_COUNT: begin
+					state <= WAIT_FOR_EVENT;
+				end
          endcase
 	
 	assign fifoRst = rst | (state == RESET);
@@ -154,7 +168,7 @@ module DataAccumulator(
 	assign dataCounterEn = (state == READ_IN_DATA);
 	assign eventCounterEn = (state == INC_EVENT_COUNT);
 	assign dataCounterRst = (state == RESET) | (state == INC_EVENT_COUNT);
-	assign eventCounterRst = (state == RESET) | ((state == INC_EVENT_COUNT) & (eventCounter == NUM_EVENTS)); //(eventCounter == 8'd255)
+	assign eventCounterRst = (state == RESET) | (state == RST_EVENT_COUNT);
 	
 	localparam signed [7:0] MIDVALUE = 8'd0;
 		
@@ -162,11 +176,12 @@ module DataAccumulator(
 		if (state == RESET)
 			offset <= 8'd0;
 		else if (state == WAIT_FOR_EVENT)
-			offset <= MIDVALUE - inputData;
+			offset <= 8'd 0; //MIDVALUE - inputData; //comment out offset removal
 	
 	wire signed [15:0] sInputData;
 	wire signed [15:0] sOffset;
 	
+	//extend the last bit for 2s complement. Any better syntax to assign one to many?
 	assign sInputData [15:7] = {inputData[7], inputData[7], inputData[7], inputData[7], inputData[7], inputData[7], inputData[7], inputData[7], inputData[7]};
 	assign sInputData [6:0] = inputData[6:0];
 	assign sOffset [15:7] = {offset[7], offset[7], offset[7], offset[7], offset[7], offset[7], offset[7], offset[7], offset[7]};
@@ -175,6 +190,7 @@ module DataAccumulator(
 	always@(posedge clk) begin
 		adderNewData <= sInputData + sOffset;
 	end
+	
 	
 	always@(posedge clk)
 		if(eventCounter == 8'd0)
@@ -185,13 +201,15 @@ module DataAccumulator(
 //	assign adderPrevData = fifoDataOut; //(eventCounter == 8'd0) ? 16'd0 : fifoDataOut;
 //   assign adderSum = (eventCounter == 8'd0) ? adderNewData : adderNewData + adderPrevData;
 	always@(posedge clk)
-		if(~adderNewData[7])
-			adderSum <= adderPrevData; //16'd0;
-		else
-			adderSum <= adderNewData + adderPrevData;
+		adderSum <= adderNewData + adderPrevData;
+//		if(~adderNewData[7])
+//			adderSum <= adderPrevData; //16'd0;
+//		else
+//			adderSum <= adderNewData + adderPrevData;
 		
 	reg bufNotFirstEvent = 0;	
-	assign f2sWrEn = ((state == READ_IN_DATA) | (state == READ_FRONT_FIFO) | (state == DELAY_ONE_CLK_RD)) & (eventCounter == 8'd0) & bufNotFirstEvent;
+	assign f2sWrEn = ((state == READ_IN_DATA) | (state == READ_FRONT_FIFO) | 
+							(state == DELAY_ONE_CLK_RD)) & (eventCounter == 8'd0) & bufNotFirstEvent;
 	assign dataEmpty = f2sEmpty;
 	assign f2sRdEn = dataRead;
 	
