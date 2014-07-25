@@ -25,6 +25,7 @@ module DataCapture(
     input dataCaptureStrobe,
     input dataRead,
     input rst,
+	 input readyToTransmit,
     output dataReadyToRead,
 	 output dataValid, 
     output dataEmpty,
@@ -71,7 +72,7 @@ module DataCapture(
 				else
 					state1<=WAIT_FOR_TRIG;
 			WRITE:
-				if(ffb_full)
+				if(ffb_almost_full)
 					state1<=WAIT_FOR_EMPTY;
 				else
 					state1<=WRITE;
@@ -90,35 +91,39 @@ module DataCapture(
       end
       else
          (* FULL_CASE, PARALLEL_CASE *) case (state2)
-			WAIT:
+			WAIT:	//wait until ffb is full
 				if(ffb_full_sync)
 					state2<=READ;
 				else
 					state2<=WAIT;
-			READ:
-				if(ffb_empty)
+			READ:	//read data from ffb to sfa
+				if(ffb_almost_empty)
 					state2<=INC_EVENTS;
 				else
 					state2<=READ;
-			INC_EVENTS:
+			INC_EVENTS:	//increment the number of events captured TODO
 				state2<=CHECK_EVENTS;
 			CHECK_EVENTS:
 				if(numEvents == NUM_EVENTS)
-					state2<=EMPTY_FIFO;
+					if(readyToTransmit)			//wait until the DataStorageAcc module is ready to transmit
+						state2<=EMPTY_FIFO;
+					else
+						state2<=CHECK_EVENTS;
 				else
 					state2<=WAIT;
-			EMPTY_FIFO:
+			EMPTY_FIFO:								//empty the accumulator fifo into the transmit fifo
 				if(sfa_empty)
 					state2<=WAIT;
 				else
 					state2<=EMPTY_FIFO;
 			endcase
 
+	//fifo 1 write enable logic
+	assign ffb_wr = (state1 == WRITE);
+
 	//communication between fast fifo and accumulator fifo
 	assign ffb_rd = (state2 == READ);
 	assign sfa_wr = ffb_valid;
-	assign ffb_wr = state1 == WRITE;
-
 
 	//communication between accumululator fifo and transmit buffer fifo
 	assign sfa_rd = (state2 == EMPTY_FIFO & ~fdt_full);
@@ -151,7 +156,9 @@ module DataCapture(
 	  .rd_en(ffb_rd), // input rd_en
 	  .dout(ffb_dout), // output [7 : 0] dout
 	  .full(ffb_full), // output full
+	  .almost_full(ffb_almost_full), // output almost_full
 	  .empty(ffb_empty), // output empty
+	  .almost_empty(ffb_almost_empty), // output almost_empty
 	  .valid(ffb_valid) // output valid
 	);
 
@@ -163,7 +170,9 @@ module DataCapture(
 	  .rd_en(sfa_rd), // input rd_en
 	  .dout(sfa_dout), // output [15 : 0] dout
 	  .full(sfa_full), // output full
+	  .almost_full(sfa_almost_full), // output almost_full
 	  .empty(sfa_empty), // output empty
+	  .almost_empty(sfa_almost_empty), // output almost_empty
 	  .valid(sfa_valid) // output valid
 	);
 
@@ -179,7 +188,9 @@ module DataCapture(
 	  .rd_en(dataRead), // input rd_en
 	  .dout(dataOut), // output [15 : 0] dout
 	  .full(fdt_full), // output full
+	  .almost_full(fdt_almost_full), // output almost_full
 	  .empty(fdt_empty), // output empty
+	  .almost_empty(fdt_almost_empty), // output almost_empty
 	  .valid(fdt_valid) // output valid
 	);
 

@@ -195,19 +195,34 @@ SystemSetting TriggerAutoResetSetting (
 //------------------------------------------------------------------------------
 wire [3:0] triggerState;
 
-TriggerControl TriggerController (
-    .clk(ClkADC2DCM),
-    .t_p(DATA_TRIGGER_P),
-    .t_n(DATA_TRIGGER_N),
-    .armed(triggerArmed),				 
-    .module_reset(~ADCClockOn),
-	 .manual_reset(triggerReset), 
+//TriggerControl TriggerController (
+//    .clk(ClkADC2DCM),
+//    .t_p(DATA_TRIGGER_P),
+//    .t_n(DATA_TRIGGER_N),
+//    .armed(triggerArmed),				 
+//    .module_reset(~ADCClockOn),
+//	 .manual_reset(triggerReset), 
+//    .auto_reset(autoTriggerReset),
+//	 .manual_trigger(recordData),
+//    .triggered_out(triggered),
+//    .comp_reset_high(TRIGGER_RST_P), 
+//    .comp_reset_low(TRIGGER_RST_N),
+//    );
+
+TriggerControl TriggerModule (
+    .clk(ClkADC2DCM), 
+    .t_p(DATA_TRIGGER_P), 
+    .t_n(DATA_TRIGGER_N), 
+    .armed(triggerArmed), 
+    .module_reset(~ADCClockOn), 
+    .manual_reset(triggerReset), 
     .auto_reset(autoTriggerReset), 
-    .triggered(triggered),
+    .manual_trigger(recordData), 
+    .triggered_out(triggered), 
     .comp_reset_high(TRIGGER_RST_P), 
-    .comp_reset_low(TRIGGER_RST_N),
-	 .state_w(triggerState)
+    .comp_reset_low(TRIGGER_RST_N)
     );
+
 
 //------------------------------------------------------------------------------
 // I2C Communication and Devices
@@ -361,18 +376,16 @@ wire waitForTrigger, holdTrigger;
 //------------------------------------------------------------------------------
 // Data FIFOs with accumulation of triggered data
 //------------------------------------------------------------------------------
-	DataStorageAcc DataFifos (
-		.DataIn(ADCRegDataOut), 
-		.DataOut(StoredDataOut), 
-		.FastTrigger(triggered), 
-		.ReadEnable(adcDataRead), 
-		.WriteClock(ClkADC2DCM), 
-		.ReadClock(clk), 
-		.Reset(~triggerArmed), 
-		.DataReady(DataReadyToSend),
-		.gDataOut(eod), 
-		.GenStrobe(eodWr)
-	);
+DataStorageAcc DataFIFOS (
+    .DataIn(ADCRegDataOut), 
+    .DataOut(StoredDataOut), 
+    .FastTrigger(triggered), 
+    .ReadEnable(adcDataRead), 
+    .WriteClock(ClkADC2DCM), 
+    .ReadClock(clk), 
+    .Reset(1'b0), 
+    .DataReady(DataReadyToSend)
+    );
 
 
 //// Data is recorded either with the serial command "X", or a trigger event

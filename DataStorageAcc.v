@@ -20,18 +20,14 @@
 //////////////////////////////////////////////////////////////////////////////////
 module DataStorageAcc(
     input [31:0] DataIn,
-    output reg [7:0] DataOut,
+	 output reg [7:0] DataOut = 8'd0,
     input FastTrigger,
     input ReadEnable,
     input WriteClock,
     input ReadClock,
     input Reset,
-    output reg DataReady = 0,
-	 output [7:0] gDataOut,
-	 output reg GenStrobe = 0,
-	 input [7:0] NumToAdd
+    output reg DataReady = 1'b0
     );
-
 
 	reg byteNumber; //read high (1) or low byte (0) 
 	reg [3:0] fifoNumber = 4'b0001;
@@ -43,23 +39,20 @@ module DataStorageAcc(
 	
 	reg [10:0] readCounts = 11'd0; //this is 10 bits - 512 data points * 2 bytes each
 	
-	parameter WAIT_TO_TRANSMIT = 9'b000000001;
-	parameter START1				= 9'b000000010;
-	parameter START2				= 9'b000000100;
-	parameter DQD_READ			= 9'b000001000;
-	parameter DID_READ			= 9'b000010000;
-	parameter DQ_READ				= 9'b000100000;
-	parameter DI_READ 			= 9'b001000000;
-	parameter END1					= 9'b010000000;
-	parameter END2					= 9'b100000000;
+	parameter WAIT_TO_TRANSMIT = 8'b00000001;
+	parameter START				= 8'b00000010;
+	parameter DQD_READ			= 8'b00000100;
+	parameter DID_READ			= 8'b00001000;
+	parameter DQ_READ				= 8'b00010000;
+	parameter DI_READ 			= 8'b00100000;
+	parameter CHECK_FOR_DATA 	= 8'b01000000;
+	parameter END					= 8'b10000000;
 	
 	
 	//Wait until data is available on all fifos
 	wire dataReadyFromAcc = dataReadyToReadDI | dataReadyToReadDID | dataReadyToReadDQ | dataReadyToReadDQD;
 	
-	
 	always@(posedge ReadClock) begin
-		DataReady <= (state != WAIT_TO_TRANSMIT);
 		if(state == WAIT_TO_TRANSMIT) begin
 			byteNumber <= 0;
 			readCounts <= 0;
@@ -74,8 +67,7 @@ module DataStorageAcc(
 	
 	//note: the read signals should only pulse high for 1 clock cycle
 	//after the current data has already been read
-	
-	(* FSM_ENCODING="ONE-HOT", SAFE_IMPLEMENTATION="NO" *) reg [8:0] state = WAIT_TO_TRANSMIT;
+	(* FSM_ENCODING="ONE-HOT", SAFE_IMPLEMENTATION="NO" *) reg [7:0] state = WAIT_TO_TRANSMIT;
 	always@(posedge ReadClock)
       if (Reset) begin
          state <= WAIT_TO_TRANSMIT;
@@ -87,188 +79,182 @@ module DataStorageAcc(
 				dqdRd <= 0;
 				diRd  <= 0;
 				didRd <= 0;
+				DataReady <=0;
 				if(dataReadyFromAcc)
-					state <= START1;
+					state <= START;
 				else
 					state <=WAIT_TO_TRANSMIT;
 			end
-			START1: begin
-				DataOut <= 8'b10000000;
+			START: begin
 				dqRd  <= 0;
-				dqdRd <= 0;
 				diRd  <= 0;
 				didRd <= 0;
-				if(ReadEnable) begin
-					state <= START2;
+				DataReady <=1;
+				if(ReadEnable & byteNumber) begin
+					dqdRd <= 1;
+					state <= DQD_READ;
 				end
 				else begin
-					state <=START1;
+					dqdRd <= 0;
+					state <= START;
 				end
-			end
-			START2: begin
-				DataOut <= 8'b00000010;
-				dqRd  <= 0;
-				dqdRd <= 0;
-				diRd  <= 0;
-				didRd <= 0;
-				if(ReadEnable)
-					state <= DQD_READ;
-				else
-					state <=START2;
 			end
 			DQD_READ: begin
 				dqRd  <= 0;
 				diRd  <= 0;
-				didRd <= 0;
+				dqdRd <= 0;
+				DataReady <=1;
 				if(ReadEnable & (byteNumber)) begin
 					state <= DID_READ;
-					dqdRd <= 1;
+					didRd <= 1;
 				end
 				else begin
 					state <=DQD_READ;
-					dqdRd <= 0;
-				end
-				if(byteNumber)
-					DataOut <= dataOutDQD[7:0];
-				else
-					DataOut <= dataOutDQD[15:8];				
+					didRd <= 0;
+				end			
 			end
 			DID_READ: begin
 				dqdRd <= 0;
-				dqRd  <= 0;
+				didRd  <= 0;
 				diRd <= 0;
+				DataReady <=1;
 				if(ReadEnable & (byteNumber)) begin
 					state <= DQ_READ;
-					didRd <= 1;
-				end
-				else begin
-					state <=DID_READ;
-					didRd <= 0;
-				end
-				if(byteNumber)
-					DataOut <= dataOutDID[7:0];
-				else
-					DataOut <= dataOutDID[15:8];				
-			end			
-			DQ_READ: begin
-				dqdRd <= 0;
-				diRd  <= 0;
-				didRd <= 0;
-				
-				if(ReadEnable & (byteNumber)) begin
-					state <= DI_READ;
 					dqRd <= 1;
 				end
 				else begin
-					state <=DQ_READ;
+					state <=DID_READ;
 					dqRd <= 0;
-				end
-				
-				if(byteNumber)
-					DataOut <= dataOutDQ[7:0];
-				else
-					DataOut <= dataOutDQ[15:8];
-			end
-			DI_READ: begin
+				end			
+			end			
+			DQ_READ: begin
 				dqdRd <= 0;
 				dqRd  <= 0;
 				didRd <= 0;
-
+				DataReady <=1;
 				if(ReadEnable & (byteNumber)) begin
+					state <= DI_READ;
 					diRd <= 1;
-					if(readCounts == 11'd1024 || readCounts == 11'd1024)	//not sure which is right
-						state<=END1;
-					else
-						state <= DQD_READ;	//move to next state
+				end
+				else begin
+					state <=DQ_READ;
+					diRd <= 0;
+				end
+			end
+			DI_READ: begin
+				diRd <= 0;
+				dqRd  <= 0;
+				didRd <= 0;
+				DataReady <=1;
+				if(ReadEnable & (byteNumber)) begin
+					dqdRd <= 1;
+					state <= CHECK_FOR_DATA;	//move to next state
 				end
 				else begin
 					state <=DI_READ; 	//stay at this state
-					diRd <= 0;
-				end
-				
-				if(byteNumber)
-					DataOut <= dataOutDI[7:0];
-				else
-					DataOut <= dataOutDI[15:8];
-			end
-			END1: begin
-				DataOut <= 8'b10000000;
-				if(ReadEnable) begin
-					state <= END2;
-					dqRd  <= 1;
-					dqdRd <= 1;
-					diRd  <= 1;
-					didRd <= 1;
-				end
-				else begin
-					state <=END1;
-					dqRd  <= 0;
 					dqdRd <= 0;
-					diRd  <= 0;
-					didRd <= 0;
 				end
 			end
-			END2: begin
-				DataOut <= 8'b00000001;
+			CHECK_FOR_DATA:begin
+				DataReady <=0;
+				diRd <= 0;
 				dqRd  <= 0;
-				dqdRd <= 0;
+				didRd <= 0;
+				dqdRd <=0;
+				if(dataReadyFromAcc)
+					state <= DQD_READ;
+				else
+					state <= END;
+			end
+			END: begin
+				DataReady <=1;
+				dqRd  <= 0;
 				diRd  <= 0;
 				didRd <= 0;
-				if(ReadEnable)
+				dqdRd <= 0;
+				if(ReadEnable & byteNumber)
 					state <= WAIT_TO_TRANSMIT;
-				else
-					state <=END2;
+				else 					
+					state <= END;
 			end
 		endcase
 			
+	//Mux for selecting output		
+	wire [8:0] muxIn;
+	assign muxIn = {state, byteNumber};
+	always @(posedge ReadClock)
+      case (muxIn)
+         {START, 1'b0}: 	DataOut = 8'b10000000;
+         {START, 1'b1}: 	DataOut = 8'b00000010;
+         {DQD_READ, 1'b0}: DataOut = dataOutDQD[15:8];
+         {DQD_READ, 1'b1}: DataOut = dataOutDQD[7:0];
+         {DID_READ, 1'b0}: DataOut = dataOutDID[15:8];
+         {DID_READ, 1'b1}: DataOut = dataOutDID[7:0];
+         {DQ_READ, 1'b0}:  DataOut = dataOutDQ[15:8];
+         {DQ_READ, 1'b1}:  DataOut = dataOutDQ[7:0];
+			{DI_READ, 1'b0}:  DataOut = dataOutDI[15:8];
+			{DI_READ, 1'b1}:  DataOut = dataOutDI[7:0];
+         {END, 1'b0}: 	DataOut = 8'b10000000;
+         {END, 1'b1}: 	DataOut = 8'b00000001;
+      endcase
+		
+	wire readyToTransmit = (state == WAIT_TO_TRANSMIT);
 			
 //fifos 
-DataAccumulator DI (
+DataCapture DI (
     .clk(WriteClock),
     .clkSlow(ReadClock), 
     .inputData(DataIn[31:24]), 
     .dataCaptureStrobe(FastTrigger), 
     .dataRead(diRd), 
-    .rst(Reset), 
+    .rst(Reset),
+	 .readyToTransmit(readyToTransmit),
     .dataReadyToRead(dataReadyToReadDI), 
     .dataEmpty(dataEmptyDI), 
-    .dataOut(dataOutDI)
+    .dataOut(dataOutDI),
+	 .dataValid(dataValidDI)
     );
 	 
-DataAccumulator DID (
+DataCapture DID (
     .clk(WriteClock),
     .clkSlow(ReadClock), 
     .inputData(DataIn[23:16]), 
     .dataCaptureStrobe(FastTrigger), 
     .dataRead(didRd), 
     .rst(Reset), 
+	 .readyToTransmit(readyToTransmit),
     .dataReadyToRead(dataReadyToReadDID), 
     .dataEmpty(dataEmptyDID), 
-    .dataOut(dataOutDID)
+    .dataOut(dataOutDID),
+	 .dataValid(dataValidDID)
     );
 	 
-DataAccumulator DQ (
+DataCapture DQ (
     .clk(WriteClock),
     .clkSlow(ReadClock), 
     .inputData(DataIn[15:8]), 
     .dataCaptureStrobe(FastTrigger), 
     .dataRead(dqRd), 
     .rst(Reset), 
+	 .readyToTransmit(readyToTransmit),
     .dataReadyToRead(dataReadyToReadDQ), 
     .dataEmpty(dataEmptyDQ), 
-    .dataOut(dataOutDQ)
+    .dataOut(dataOutDQ),
+	 .dataValid(dataValidDQ)
     );
 	 
-DataAccumulator DQD (
+DataCapture DQD (
     .clk(WriteClock),
     .clkSlow(ReadClock), 
     .inputData(DataIn[7:0]), 
     .dataCaptureStrobe(FastTrigger), 
     .dataRead(dqdRd), 
     .rst(Reset), 
+	 .readyToTransmit(readyToTransmit),
     .dataReadyToRead(dataReadyToReadDQD), 
     .dataEmpty(dataEmptyDQD), 
-    .dataOut(dataOutDQD)
+    .dataOut(dataOutDQD),
+	 .dataValid(dataValidDQD)
     );
 	 
 

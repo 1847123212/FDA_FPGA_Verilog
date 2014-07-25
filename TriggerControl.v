@@ -47,7 +47,7 @@ module TriggerControl(
 	parameter CHECK_FOR_RST = 	4'b1000;
 
 	(* FSM_ENCODING="ONE-HOT", SAFE_IMPLEMENTATION="NO" *) reg [3:0] state = IDLE;
-	always@(posedge clk or posedge module_reset)
+	always@(posedge clk)// or posedge module_reset)
       if (module_reset) begin
          state <= CHECK_FOR_RST;
       end
@@ -144,13 +144,13 @@ module TriggerControl(
 	async_input_sync manual_reset_sync_module (
     .clk(clk), 
     .async_in(manual_reset), 
-    .sync_out(manual_reset_sync)
+    .sync_out(manual_rst_sync)
     );
 	 
 	 async_input_sync auto_reset_sync_module (
     .clk(clk), 
     .async_in(auto_reset), 
-    .sync_out(auto_reset_sync)
+    .sync_out(auto_rst_sync)
     );
 
 	 async_input_sync armed_sync_module (

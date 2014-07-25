@@ -35,7 +35,7 @@ module DATA_STORAGE_ACC_TB;
 	wire [7:0] DataOut;
 	wire DataReady, ReadEnable;
 	reg [7:0] txData = 8'd0;
-	reg txDataWr = 1'b1;
+	reg txDataWr = 1'b0;
 	
 	// Instantiate the Unit Under Test (UUT)
 	TxDWrapper UUT2 (
