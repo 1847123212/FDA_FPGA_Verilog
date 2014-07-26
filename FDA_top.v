@@ -384,7 +384,8 @@ DataStorageAcc DataFIFOS (
     .WriteClock(ClkADC2DCM), 
     .ReadClock(clk), 
     .Reset(1'b0), 
-    .DataReady(DataReadyToSend)
+    .DataReady(DataReadyToSend),
+	 .numEvents(ProgFullThresh[7:0])
     );
 
 

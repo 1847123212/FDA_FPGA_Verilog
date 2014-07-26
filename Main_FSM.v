@@ -277,7 +277,7 @@ module Main_FSM(
 			ENABLE_SELF_TRIGGER: NextState = COMMAND_ACK;
 			DISABLE_SELF_TRIGGER: NextState = COMMAND_ACK;
 			SET_DATA_STORAGE_VALUE:begin
-				if(dataStorageCounter == 4'd14)
+				if(dataStorageCounter == 4'd8)
 					NextState = COMMAND_ACK;
 			end 
 			ADC_WAKE: NextState = COMMAND_ACK;

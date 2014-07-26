@@ -31,6 +31,7 @@ module DATA_CAPTURE_TB;
 	reg dataCaptureStrobe;
 	reg dataRead;
 	reg rst;
+	reg readyToTransmit;
 
 	// Outputs
 	wire dataReadyToRead;
@@ -45,7 +46,8 @@ module DATA_CAPTURE_TB;
 		.inputData(inputData), 
 		.dataCaptureStrobe(dataCaptureStrobe), 
 		.dataRead(dataRead), 
-		.rst(rst), 
+		.rst(rst),
+		.readyToTransmit(readyToTransmit),
 		.dataReadyToRead(dataReadyToRead), 
 		.dataValid(dataValid), 
 		.dataEmpty(dataEmpty), 
@@ -58,6 +60,7 @@ module DATA_CAPTURE_TB;
 		dataCaptureStrobe = 0;
 		dataRead = 0;
 		rst = 1;
+		readyToTransmit = 1;
 
 		// Wait 100 ns for global reset to finish
 		#100;

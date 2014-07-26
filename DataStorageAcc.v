@@ -26,7 +26,8 @@ module DataStorageAcc(
     input WriteClock,
     input ReadClock,
     input Reset,
-    output reg DataReady = 1'b0
+    output reg DataReady = 1'b0,
+	 input [7:0] numEvents
     );
 
 	reg byteNumber; //read high (1) or low byte (0) 
@@ -212,7 +213,8 @@ DataCapture DI (
     .dataReadyToRead(dataReadyToReadDI), 
     .dataEmpty(dataEmptyDI), 
     .dataOut(dataOutDI),
-	 .dataValid(dataValidDI)
+	 .dataValid(dataValidDI),
+	 .numEvents(numEvents)
     );
 	 
 DataCapture DID (
@@ -226,7 +228,8 @@ DataCapture DID (
     .dataReadyToRead(dataReadyToReadDID), 
     .dataEmpty(dataEmptyDID), 
     .dataOut(dataOutDID),
-	 .dataValid(dataValidDID)
+	 .dataValid(dataValidDID),
+	 .numEvents(numEvents)
     );
 	 
 DataCapture DQ (
@@ -240,7 +243,8 @@ DataCapture DQ (
     .dataReadyToRead(dataReadyToReadDQ), 
     .dataEmpty(dataEmptyDQ), 
     .dataOut(dataOutDQ),
-	 .dataValid(dataValidDQ)
+	 .dataValid(dataValidDQ),
+	 .numEvents(numEvents)
     );
 	 
 DataCapture DQD (
@@ -254,7 +258,8 @@ DataCapture DQD (
     .dataReadyToRead(dataReadyToReadDQD), 
     .dataEmpty(dataEmptyDQD), 
     .dataOut(dataOutDQD),
-	 .dataValid(dataValidDQD)
+	 .dataValid(dataValidDQD),
+	 .numEvents(numEvents)
     );
 	 
 

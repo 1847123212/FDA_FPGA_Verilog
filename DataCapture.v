@@ -29,10 +29,11 @@ module DataCapture(
     output dataReadyToRead,
 	 output dataValid, 
     output dataEmpty,
-    output [15:0] dataOut
+    output [15:0] dataOut,
+	 input [7:0] numEvents
     );
 	 
-	parameter NUM_EVENTS = 1'b1;
+	//parameter NUM_EVENTS = 8'd255;
 	
 	//FSM States
 	parameter RESET = 			4'b0001;
@@ -40,15 +41,16 @@ module DataCapture(
 	parameter WRITE = 			4'b0100;
 	parameter WAIT_FOR_EMPTY =	4'b1000;
 	
-	parameter WAIT = 				5'b00001;
-	parameter READ = 				5'b00010;
-	parameter INC_EVENTS = 		5'b00100;
-	parameter CHECK_EVENTS = 	5'b01000;
-	parameter EMPTY_FIFO =		5'b10000;
+	parameter RESET2 =			6'b000001;
+	parameter WAIT = 				6'b000010;
+	parameter READ = 				6'b000100;
+	parameter INC_EVENTS = 		6'b001000;
+	parameter CHECK_EVENTS = 	6'b010000;
+	parameter EMPTY_FIFO =		6'b100000;
 
 
 	//Registers
-	reg numEvents = 1'b1;	//Will eventually be more
+	reg [7:0] numEventsCnt = 8'd0;
 	
 	//Wires
 	wire rstFSM2 = 1'b0;
@@ -62,12 +64,9 @@ module DataCapture(
       else
          (* FULL_CASE, PARALLEL_CASE *) case (state1)
 			RESET:
-				if(~ffb_full)	//this will be high when in FIFO is resetting mode
-					state1<=WAIT_FOR_TRIG;
-				else
-					state1<=RESET;
+				state1<=WAIT_FOR_TRIG;
 			WAIT_FOR_TRIG:
-				if(dataCaptureStrobe)
+				if(dataCaptureStrobe)		// & sfa_empty_sync & fdt_empty_sync
 					state1<=WRITE;
 				else
 					state1<=WAIT_FOR_TRIG;
@@ -84,13 +83,18 @@ module DataCapture(
 			endcase
 			
 
-	(* FSM_ENCODING="ONE-HOT", SAFE_IMPLEMENTATION="NO" *) reg [4:0] state2 = WAIT;
+	(* FSM_ENCODING="ONE-HOT", SAFE_IMPLEMENTATION="NO" *) reg [5:0] state2 = RESET2;
 	always@(posedge clkSlow)
-      if (rstFSM2) begin
-         state2 <= WAIT;
+      if (rst) begin
+         state2 <= RESET2;
       end
       else
          (* FULL_CASE, PARALLEL_CASE *) case (state2)
+			RESET2:
+				if(~ffb_full_sync)
+					state2 <= WAIT;
+				else
+					state2 <= RESET2;
 			WAIT:	//wait until ffb is full
 				if(ffb_full_sync)
 					state2<=READ;
@@ -104,7 +108,7 @@ module DataCapture(
 			INC_EVENTS:	//increment the number of events captured TODO
 				state2<=CHECK_EVENTS;
 			CHECK_EVENTS:
-				if(numEvents == NUM_EVENTS)
+				if(numEvents == numEventsCnt)
 					if(readyToTransmit)			//wait until the DataStorageAcc module is ready to transmit
 						state2<=EMPTY_FIFO;
 					else
@@ -126,13 +130,33 @@ module DataCapture(
 	assign sfa_wr = ffb_valid;
 
 	//communication between accumululator fifo and transmit buffer fifo
-	assign sfa_rd = (state2 == EMPTY_FIFO & ~fdt_full);
+	assign sfa_rd = (state2 == EMPTY_FIFO & ~fdt_full) | 
+							(state2 == READ & numEvents > 8'd0);
 	assign fdt_wr = sfa_valid & (state2==EMPTY_FIFO);
 	
+	always@(posedge clkSlow)
+		if(state2 == EMPTY_FIFO | state2 == RESET2)
+			numEventsCnt <= 8'd0;
+		else if(state2 == INC_EVENTS)
+			numEventsCnt <= numEventsCnt + 1;
+	
+	//Clock domain crossing
 	async_input_sync ffb_empty_sync_module (
 		.clk(clk), 
 		.async_in(ffb_empty), 
 		.sync_out(ffb_empty_sync)
+	);
+
+	async_input_sync sfa_empty_sync_module (
+		.clk(clk), 
+		.async_in(sfa_empty), 
+		.sync_out(sfa_empty_sync)
+	);
+	
+	async_input_sync fdt_empty_sync_module (
+		.clk(clk), 
+		.async_in(fdt_empty), 
+		.sync_out(fdt_empty_sync)
 	);
 	 
 	async_input_sync ffb_full_sync_module (
@@ -145,7 +169,9 @@ module DataCapture(
 	wire [15:0] sfa_din;
 	wire [15:0] sfa_dout;
 	wire [15:0] fdt_din;
-	assign sfa_din = {8'd0,ffb_dout};
+	wire [15:0] dataToAdd; 
+	assign dataToAdd = (numEvents == 8'd0) ? 16'd0 : sfa_dout;
+	assign sfa_din = {8'd0,ffb_dout} + dataToAdd;
 	
 	FIFO_IND_CLK_8x128 fast_fifo_buffer (
 	  .rst(rst), // input rst
