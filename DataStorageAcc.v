@@ -38,7 +38,7 @@ module DataStorageAcc(
 	wire [15:0] dataOutDQ;
 	wire [15:0] dataOutDI;
 	
-	reg [10:0] readCounts = 11'd0; //this is 10 bits - 512 data points * 2 bytes each
+//	reg [10:0] readCounts = 11'd0; //this is 10 bits - 512 data points * 2 bytes each
 	
 	parameter WAIT_TO_TRANSMIT = 8'b00000001;
 	parameter START				= 8'b00000010;
@@ -56,11 +56,11 @@ module DataStorageAcc(
 	always@(posedge ReadClock) begin
 		if(state == WAIT_TO_TRANSMIT) begin
 			byteNumber <= 0;
-			readCounts <= 0;
+//			readCounts <= 0;
 		end
 		else if (ReadEnable) begin
 			byteNumber <= ~byteNumber;
-			readCounts <= readCounts + 1;
+//			readCounts <= readCounts + 1;
 		end
 	end
 	
@@ -214,7 +214,7 @@ DataCapture DI (
     .dataEmpty(dataEmptyDI), 
     .dataOut(dataOutDI),
 	 .dataValid(dataValidDI),
-	 .numEvents(numEvents)
+	 .numEventsToAdd(numEvents)
     );
 	 
 DataCapture DID (
@@ -229,7 +229,7 @@ DataCapture DID (
     .dataEmpty(dataEmptyDID), 
     .dataOut(dataOutDID),
 	 .dataValid(dataValidDID),
-	 .numEvents(numEvents)
+	 .numEventsToAdd(numEvents)
     );
 	 
 DataCapture DQ (
@@ -244,7 +244,7 @@ DataCapture DQ (
     .dataEmpty(dataEmptyDQ), 
     .dataOut(dataOutDQ),
 	 .dataValid(dataValidDQ),
-	 .numEvents(numEvents)
+	 .numEventsToAdd(numEvents)
     );
 	 
 DataCapture DQD (
@@ -259,7 +259,7 @@ DataCapture DQD (
     .dataEmpty(dataEmptyDQD), 
     .dataOut(dataOutDQD),
 	 .dataValid(dataValidDQD),
-	 .numEvents(numEvents)
+	 .numEventsToAdd(numEvents)
     );
 	 
 

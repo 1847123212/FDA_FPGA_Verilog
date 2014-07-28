@@ -47,9 +47,10 @@ module TriggerControl(
 	parameter CHECK_FOR_RST = 	4'b1000;
 
 	(* FSM_ENCODING="ONE-HOT", SAFE_IMPLEMENTATION="NO" *) reg [3:0] state = IDLE;
-	always@(posedge clk)// or posedge module_reset)
+	//needs asynchronous reset because clk may not be running
+	always@(posedge clk or posedge module_reset)
       if (module_reset) begin
-         state <= CHECK_FOR_RST;
+         state <= IDLE;
       end
       else
          (* FULL_CASE, PARALLEL_CASE *) case (state)
@@ -84,42 +85,45 @@ module TriggerControl(
 	
 	(* FSM_ENCODING="ONE-HOT", SAFE_IMPLEMENTATION="NO" *) reg [2:0] teState = OFF;
 	always@(posedge clk)
-		(* FULL_CASE, PARALLEL_CASE *) case (teState)
-		OFF: begin
-			trig_out_en <= 1'b0;
-			if(armed_sync & ~triggered)	//include ~triggered so that we can just test for triggered in T_EN
-				teState <= T_EN;
-			else
-				teState <= OFF;
-		end
-		T_EN: begin
-			trig_out_en <= 1'b1;
-			if(triggered)
-				if(auto_rst_sync)
-					teState <= OFF;	//go back to off to check if has been de-armed, and wait for trigger to de-assert	
+		if (1'b0)
+         teState <= OFF;
+		else
+			(* FULL_CASE, PARALLEL_CASE *) case (teState)
+			OFF: begin
+				trig_out_en <= 1'b0;
+				if(armed_sync & ~triggered)	//include ~triggered so that we can just test for triggered in T_EN
+					teState <= T_EN;
+				else
+					teState <= OFF;
+			end
+			T_EN: begin
+				trig_out_en <= 1'b1;
+				if(triggered)
+					if(auto_rst_sync)
+						teState <= OFF;	//go back to off to check if has been de-armed, and wait for trigger to de-assert	
+					else
+						teState <= WAIT_FOR_RST;
+				else if(~armed_sync)			//if trigger is de-armed before receiving trigger signal
+					teState <= OFF;
+				else
+					teState <= T_EN;
+			end
+			WAIT_FOR_RST: begin
+				trig_out_en <= 1'b0;
+				if(manual_rst_sync | ~armed_sync)
+					teState <= OFF;
 				else
 					teState <= WAIT_FOR_RST;
-			else if(~armed_sync)			//if trigger is de-armed before receiving trigger signal
-				teState <= OFF;
-			else
-				teState <= T_EN;
-		end
-		WAIT_FOR_RST: begin
-			trig_out_en <= 1'b0;
-			if(manual_rst_sync | ~armed_sync)
-				teState <= OFF;
-			else
-				teState <= WAIT_FOR_RST;
-		end
-		endcase
+			end
+			endcase
 
 	// Use triggerCounter to delay the trigger reset by 4 clock cycles 
 	// Do this so that we don't re-trigger on the same signal input trigger immediately 
-	reg [2:0] triggerCounter = 3'b1;
+	reg [2:0] triggerCounter = 3'b000;
 	always@(posedge clk) begin
 		if(state != TRIGGERED)
 			triggerCounter <= 3'b0;
-		else if(~triggerCounter[2])
+		else if(state == TRIGGERED)
 			triggerCounter <= triggerCounter + 1;
 	end
 

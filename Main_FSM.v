@@ -50,10 +50,10 @@ module Main_FSM(
 	 output enAutoTrigReset,
 	 output disAutoTrigReset,
 	 output resetDCM,
-	 output reg [7:0] selfTriggerValue,
+	 output reg [7:0] selfTriggerValue = 8'd0,
 	 output enSelfTrigger,
 	 output disSelfTrigger,
-	 output reg [13:0] storageAmount, 
+	 output reg [7:0] storageAmount = 8'd1, 
 	 
 	 //uart output
 	 output reg [7:0] txData,
@@ -148,8 +148,8 @@ module Main_FSM(
 		end
 		//Send ACK character
 		else if(State == COMMAND_ACK)begin
-			//txData <= "*";
-			//txDataWr <= 1'b1;
+			txData <= "*";
+			txDataWr <= 1'b1;
 		end
 		//Send an error character
 		else if(State == ERROR_IN2)begin
@@ -206,9 +206,9 @@ module Main_FSM(
 		else if(State == SET_DATA_STORAGE_VALUE & NewCmd) begin
 			dataStorageCounter <= dataStorageCounter + 1;
 			if(Cmd == "0")
-				storageAmount <= {storageAmount[12:0], 1'b0};
+				storageAmount <= {storageAmount[6:0], 1'b0};
 			else if(Cmd == "1")
-				storageAmount <= {storageAmount[12:0], 1'b1};
+				storageAmount <= {storageAmount[6:0], 1'b1};
 		end
 	 end
 	
@@ -254,9 +254,9 @@ module Main_FSM(
 			ADC_PWR_ON: NextState = COMMAND_ACK;
 			ADC_PWR_OFF: NextState = COMMAND_ACK;
 			ADC_SLEEP: NextState = COMMAND_ACK;	
-			TRIGGER_ON: NextState = COMMAND_ACK;
-			TRIGGER_OFF: NextState = COMMAND_ACK;
-			TRIGGER_RESET: NextState = COMMAND_ACK;
+			TRIGGER_ON: NextState = IDLE;
+			TRIGGER_OFF: NextState = IDLE;
+			TRIGGER_RESET: NextState = IDLE;
 			SET_TRIGGER_VOLTAGE: begin
 				if(trigVoltageCounter == 4'd10)
 					NextState = COMMAND_ACK;
@@ -274,7 +274,7 @@ module Main_FSM(
 				if(selfTriggerCounter == 4'd8)
 					NextState = COMMAND_ACK;
 			end
-			ENABLE_SELF_TRIGGER: NextState = COMMAND_ACK;
+			ENABLE_SELF_TRIGGER: NextState = IDLE;
 			DISABLE_SELF_TRIGGER: NextState = COMMAND_ACK;
 			SET_DATA_STORAGE_VALUE:begin
 				if(dataStorageCounter == 4'd8)
@@ -282,7 +282,7 @@ module Main_FSM(
 			end 
 			ADC_WAKE: NextState = COMMAND_ACK;
 			ADC_RUN_CAL: NextState = COMMAND_ACK;
-			RECORD_DATA: NextState = COMMAND_ACK;
+			RECORD_DATA: NextState = IDLE;
 			RETURN_ADC_1: NextState = RETURN_ADC_2;
 			RETURN_ADC_2: NextState = IDLE;
 			FIFO_STATE1: NextState = FIFO_STATE2;

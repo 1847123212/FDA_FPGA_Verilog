@@ -30,13 +30,13 @@ module DataCapture(
 	 output dataValid, 
     output dataEmpty,
     output [15:0] dataOut,
-	 input [7:0] numEvents
+	 input [7:0] numEventsToAdd
     );
 	 
 	//parameter NUM_EVENTS = 8'd255;
 	
 	//FSM States
-	parameter RESET = 			4'b0001;
+	parameter RESET1 = 			4'b0001;
 	parameter WAIT_FOR_TRIG = 	4'b0010;
 	parameter WRITE = 			4'b0100;
 	parameter WAIT_FOR_EMPTY =	4'b1000;
@@ -56,14 +56,14 @@ module DataCapture(
 	wire rstFSM2 = 1'b0;
 
 	//FSM to control when the fast fifo buffer is written to
-	(* FSM_ENCODING="ONE-HOT", SAFE_IMPLEMENTATION="NO" *) reg [3:0] state1 = RESET;
+	(* FSM_ENCODING="ONE-HOT", SAFE_IMPLEMENTATION="NO" *) reg [3:0] state1 = RESET1;
 	always@(posedge clk)
       if (rst) begin
-         state1 <= RESET;
+         state1 <= RESET1;
       end
       else
          (* FULL_CASE, PARALLEL_CASE *) case (state1)
-			RESET:
+			RESET1:
 				state1<=WAIT_FOR_TRIG;
 			WAIT_FOR_TRIG:
 				if(dataCaptureStrobe)		// & sfa_empty_sync & fdt_empty_sync
@@ -108,7 +108,7 @@ module DataCapture(
 			INC_EVENTS:	//increment the number of events captured TODO
 				state2<=CHECK_EVENTS;
 			CHECK_EVENTS:
-				if(numEvents == numEventsCnt)
+				if(numEventsCnt == numEventsToAdd)
 					if(readyToTransmit)			//wait until the DataStorageAcc module is ready to transmit
 						state2<=EMPTY_FIFO;
 					else
@@ -131,7 +131,7 @@ module DataCapture(
 
 	//communication between accumululator fifo and transmit buffer fifo
 	assign sfa_rd = (state2 == EMPTY_FIFO & ~fdt_full) | 
-							(state2 == READ & numEvents > 8'd0);
+							(state2 == READ & numEventsCnt > 8'd0);
 	assign fdt_wr = sfa_valid & (state2==EMPTY_FIFO);
 	
 	always@(posedge clkSlow)
@@ -170,7 +170,7 @@ module DataCapture(
 	wire [15:0] sfa_dout;
 	wire [15:0] fdt_din;
 	wire [15:0] dataToAdd; 
-	assign dataToAdd = (numEvents == 8'd0) ? 16'd0 : sfa_dout;
+	assign dataToAdd = (numEventsCnt == 8'd0) ? 16'd0 : sfa_dout;
 	assign sfa_din = {8'd0,ffb_dout} + dataToAdd;
 	
 	FIFO_IND_CLK_8x128 fast_fifo_buffer (

@@ -61,44 +61,30 @@ module FDA_top(
 	output USB_RS232_TXD,
 	input CTS,
 	
-`ifdef XILINX_ISIM
-	input [7:0] DataRxD,
-`endif	
-	
 	//GPIO
 	output [3:0] GPIO				// 0, 2, and 3 connected to LEDs
    );
 
-  wire clk;
-  wire clknub;
-
-  wire ClkADC2DCM, ADCClock, ADCClockDelayed, ADCClockOn;
-
-  wire Red, Green, Blue;
+	wire clk, AdcClk, AdcClkValid;
+	wire Red, Green, Blue;
+	wire triggered, TriggerReset;
+	wire recordData, adcPwrOn;
+	wire [3:0] adcState;
+	wire [7:0] selfTriggerValue;
+	wire [7:0] eventsToAdd;
   
 //------------------------------------------------------------------------------
 // UART and device settings/state machines 
 //------------------------------------------------------------------------------
-wire [7:0] StoredDataOut;
+	wire [7:0] StoredDataOut;	//data from ADC fifos
 
-`ifndef XILINX_ISIM
-	wire [7:0] DataRxD;
 	wire [7:0] txData;
 	wire [7:0] Cmd;
-	wire DataAvailable, ClearData;
-	wire OtherDataLatch;
-	wire ArmTrigger, TriggerReset, EchoChar;
-	wire FIFOTransmitBusy;
 	wire adcDataRead, DataReadyToSend;
-	
-	assign ClearData = 1'b0;
-	
-	wire [7:0] eod;
-	wire eodWr;
 	
 	RxDWrapper RxD (
 		 .Clock(clk), 
-		 .ClearData(ClearData), 
+		 .ClearData(1'b0), 
 		 .SDI(USB_RS232_RXD), 
 		 .CurrentData(Cmd), 
 		 .DataAvailable(NewCmd)
@@ -108,21 +94,13 @@ wire [7:0] StoredDataOut;
 		 .Clock(clk), 
 		 .Reset(1'b0), 
 		 .ADCData(StoredDataOut), 
-		 .generalData(txData | eod), 
-		 .generalDataWrite(txDataWr | eodWr), 
+		 .generalData(txData), 
+		 .generalDataWrite(txDataWr), 
 		 .adcDataStreamingMode(DataReadyToSend),  //input equal to adc fifo not empty
 		 .adcDataValid(DataReadyToSend), 			//input to UART Start signal
 		 .adcDataStrobe(adcDataRead),					//output to adc FIFO 
 		 .SDO(USB_RS232_TXD)
 		 );
-
-`endif
-
-wire recordData, adcPwrOn;
-wire [3:0] adcState;
-wire [3:0] fifoState;
-wire [7:0] selfTriggerValue;
-wire [13:0] ProgFullThresh;
 
 //Main FSM for handling UART I/O
 Main_FSM SystemFSM (
@@ -130,8 +108,8 @@ Main_FSM SystemFSM (
     .Cmd(Cmd), 
     .NewCmd(NewCmd), 
 	 .adcState(adcState),
-	 .fifoState(fifoState),
-	 .adcClockLock(ADCClockOn),
+	 .fifoState(2'b00),
+	 .adcClockLock(AdcClkValid),
     .echoChar(echoChar), 
     .echoOn(echoOn), 
     .echoOff(echoOff), 
@@ -158,7 +136,7 @@ Main_FSM SystemFSM (
 	 .selfTriggerValue(selfTriggerValue),
 	 .enSelfTrigger(enSelfTrigger),
 	 .disSelfTrigger(disSelfTrigger),
-	 .storageAmount(ProgFullThresh)
+	 .storageAmount(eventsToAdd)
     );
 
 
@@ -170,8 +148,6 @@ SystemSetting EchoSetting (
     .toggle(1'b0), 
     .out(echoChar)
     );
-
-wire triggered;
 
 wire triggerArmed, autoTriggerReset;
 SystemSetting TriggerArmSetting (
@@ -193,28 +169,12 @@ SystemSetting TriggerAutoResetSetting (
 //------------------------------------------------------------------------------
 // Trigger
 //------------------------------------------------------------------------------
-wire [3:0] triggerState;
-
-//TriggerControl TriggerController (
-//    .clk(ClkADC2DCM),
-//    .t_p(DATA_TRIGGER_P),
-//    .t_n(DATA_TRIGGER_N),
-//    .armed(triggerArmed),				 
-//    .module_reset(~ADCClockOn),
-//	 .manual_reset(triggerReset), 
-//    .auto_reset(autoTriggerReset),
-//	 .manual_trigger(recordData),
-//    .triggered_out(triggered),
-//    .comp_reset_high(TRIGGER_RST_P), 
-//    .comp_reset_low(TRIGGER_RST_N),
-//    );
-
 TriggerControl TriggerModule (
-    .clk(ClkADC2DCM), 
+    .clk(AdcClk), 
     .t_p(DATA_TRIGGER_P), 
     .t_n(DATA_TRIGGER_N), 
     .armed(triggerArmed), 
-    .module_reset(~ADCClockOn), 
+    .module_reset(~AdcClkValid), 
     .manual_reset(triggerReset), 
     .auto_reset(autoTriggerReset), 
     .manual_trigger(recordData), 
@@ -222,7 +182,6 @@ TriggerControl TriggerModule (
     .comp_reset_high(TRIGGER_RST_P), 
     .comp_reset_low(TRIGGER_RST_N)
     );
-
 
 //------------------------------------------------------------------------------
 // I2C Communication and Devices
@@ -269,7 +228,6 @@ I2C_Comm I2C (
 wire OutToADCEnable; 
 assign OutToADCEnable = (PWR_INT == 1'b1) & (ADC_PWR_EN == 1'b1);
 
-
 ADC_FSM ADC_fsm (
     .Clock(clk), 
     .Reset(1'b0), 
@@ -281,7 +239,7 @@ ADC_FSM ADC_fsm (
     .adcRunCal(adcRunCal), 
     .adcEnDes(adcEnDes), 
     .adcDisDes(adcDisDes),
-	 .ADCClockLocked(ADCClockOn),
+	 .ADCClockLocked(AdcClkValid),
     .ADCPower(ADC_PWR_EN), 
     .AnalogPower(ANALOG_PWR_EN), 
     .OutSclk(ADC_SCLK), 
@@ -295,64 +253,22 @@ ADC_FSM ADC_fsm (
     .State(adcState)
     );
 
-
 //------------------------------------------------------------------------------
-// ADC Data Clock
+// Clocks
 //------------------------------------------------------------------------------
-// Create the ADC input clock buffer and send the signal to the DCM
-
-wire ClkIO2Bufg;
-
-IBUFGDS #(
-      .DIFF_TERM("TRUE"), 		// Differential Termination
-      .IOSTANDARD("LVDS_33") 	// Specifies the I/O standard for this buffer
-   ) IBUFGDS_adcClock (
-      .O(ClkIO2Bufg),  			// Clock buffer output
-      .I(ADC_CLK_P),  			// Diff_p clock buffer input
-      .IB(ADC_CLK_N) 			// Diff_n clock buffer input
-   );
-	
-BUFG BUFG_adc_clk (
-	.O(ClkADC2DCM), // 1-bit output: Clock buffer output
-	.I(ClkIO2Bufg)  // 1-bit input: Clock buffer input
-);	
-	
-
-wire testRESET, testLOCKED, clk250mhz;
-
-ClockTest mainClk
+ClockBuffer Clock100MhzDCM
    (// Clock in ports
     .CLK_IN1(CLK_100MHZ),      // IN
     // Clock out ports
-    .CLK_OUT1(clk),     // OUT
-    .CLK_OUT2(clk250mhz),     // OUT
-    // Status and control signals
-    .RESET(1'b0),// IN
-    .LOCKED(testLOCKED));
+    .CLK_OUT1(clk));    // OUT
 
-reg [2:0] InputClockCounter = 3'b000;
-reg [7:0] InputClockCheck = 8'b00000000;
-reg [1:0] ClockDetect = 2'b00;
-wire clk_check_100mhz;
-
-assign ADCClockOn = ((InputClockCheck[7:5] != 3'b111) &  (InputClockCheck[7:5] != 3'b000) & 
-									(InputClockCheck[2:0] != 3'b111) &  (InputClockCheck[2:0] != 3'b000)); 
-
-always@(posedge ClkADC2DCM) begin
-	InputClockCounter <= InputClockCounter + 1;
-end
-
-async_input_sync input_clk_counter_sync (
-    .clk(clk), 
-    .async_in(InputClockCounter[2]), //InputClockCounter[2] changes at 62mhz
-    .sync_out(clk_check_100mhz)
+FastClockInput ADC_clock_module (
+    .clk_pin_p(ADC_CLK_P), 
+    .clk_pin_n(ADC_CLK_N), 
+    .sys_clk(clk), 
+    .clk_out(AdcClk), 
+    .clk_valid(AdcClkValid)
     );
-
-always@(posedge clk) begin
-	InputClockCheck <= {InputClockCheck[6:0], clk_check_100mhz};
-	ClockDetect <= {ClockDetect[0], ADCClockOn};
-end
-
 
 /**------------------------------------------------------------------------------
  ADC Data Input Registers
@@ -361,71 +277,46 @@ wire [31:0] ADCRegDataOut;		//DQD, DQ, DID, DI
 ADCDataInput ADC_Data_Capture (
     .DataInP(ADC_DATA_P), 
     .DataInN(ADC_DATA_N), 
-    .ClockIn(ClkADC2DCM), 
-    .ClockInDelayed(ClkADC2DCM), 
+    .ClockIn(AdcClk), 
+    .ClockInDelayed(AdcClk), 
     .DataOut(ADCRegDataOut)
     );
 
 //------------------------------------------------------------------------------
-// Data FIFOs 
-//------------------------------------------------------------------------------
-wire FifoNotFull;
-wire fifoRecord;
-wire waitForTrigger, holdTrigger;
-
-//------------------------------------------------------------------------------
 // Data FIFOs with accumulation of triggered data
 //------------------------------------------------------------------------------
+
+//// Data is recorded either with the serial command "X", or a trigger event
+//// and only when there is a lock on the ADC clock.
+//// The triggered signal comes from the external trigger
 DataStorageAcc DataFIFOS (
     .DataIn(ADCRegDataOut), 
     .DataOut(StoredDataOut), 
     .FastTrigger(triggered), 
     .ReadEnable(adcDataRead), 
-    .WriteClock(ClkADC2DCM), 
+    .WriteClock(AdcClk), 
     .ReadClock(clk), 
     .Reset(1'b0), 
     .DataReady(DataReadyToSend),
-	 .numEvents(ProgFullThresh[7:0])
+	 .numEvents(eventsToAdd[7:0])
     );
-
-
-//// Data is recorded either with the serial command "X", or a trigger event
-//// and only when there is a lock on the ADC clock.
-//// The triggered signal comes from the external trigger
-//
-//DataStorage Fifos (
-//    .DataIn(ADCRegDataOut), //ADCRegDataOut),
-//    .DataOut(StoredDataOut), 
-//    .WriteStrobe(recordData),
-//	 .FastTrigger(triggered),
-//    .ReadEnable(adcDataRead), 
-//    .WriteClock(ClkADC2DCM), //ClkADC2DCM
-//    .ReadClock(clk), 
-//    .Reset(~ADCClockOn),
-//    .DataValid(DataValid), 
-//    .DataReadyToSend(DataReadyToSend),
-//	 .State(fifoState),
-//	 .ProgFullThresh(ProgFullThresh)
-//    );
-
 
 //------------------------------------------------------------------------------
 // GPIO - The LEDs are inverted - so 0 is on, 1 is off
 //------------------------------------------------------------------------------
 
+//Code to make LED turn on for at least 100ms when AdcClkValid goes off
 reg [23:0] countdelay = 0;
-
 always@(posedge clk) begin
-	if(~ADCClockOn)
+	if(~AdcClkValid)
 		countdelay <= 24'b0;
 	else if(~countdelay[23])
-		countdelay <= countdelay + 1;
-		
+		countdelay <= countdelay + 1;	
 end
 
-assign GPIO[1] = (fifoState[0]);  //ClkADC2DCM; fifoRecord | DataReadyToSend | 
+assign GPIO[1] = 1'b0; 
 assign GPIO[0] = countdelay[23];					//red
 assign GPIO[2] = ~triggerArmed; 					//green
-assign GPIO[3] = ~triggerState[2];						//blue
+assign GPIO[3] = ~autoTriggerReset;				//blue
 
 endmodule
