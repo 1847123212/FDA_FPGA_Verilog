@@ -72,6 +72,7 @@ module FDA_top(
 	wire [3:0] adcState;
 	wire [7:0] selfTriggerValue;
 	wire [7:0] eventsToAdd;
+	wire [6:0] dataLength;
   
 //------------------------------------------------------------------------------
 // UART and device settings/state machines 
@@ -136,7 +137,8 @@ Main_FSM SystemFSM (
 	 .selfTriggerValue(selfTriggerValue),
 	 .enSelfTrigger(enSelfTrigger),
 	 .disSelfTrigger(disSelfTrigger),
-	 .storageAmount(eventsToAdd)
+	 .storageAmount(eventsToAdd),
+	 .dataLength(dataLength)
     );
 
 
@@ -298,7 +300,8 @@ DataStorageAcc DataFIFOS (
     .ReadClock(clk), 
     .Reset(1'b0), 
     .DataReady(DataReadyToSend),
-	 .numEvents(eventsToAdd[7:0])
+	 .numEvents(eventsToAdd[7:0]),
+	 .dataLength(dataLength)
     );
 
 //------------------------------------------------------------------------------

@@ -17,10 +17,10 @@ J
 j
 K  - Set the length of data to add - folow with 8 digit binary value
 k
-L	- 
+L	- Return Clock lock
 l
-M
-m
+M 	- Set the length of data (in time from trigger) to capture - follow with 7 bit binary value
+m	- Get the length of the data
 N
 n
 O	- ADC power on - this enables the 1.9V supply and then the 3.3V and 2.5V supplies

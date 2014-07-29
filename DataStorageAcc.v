@@ -27,7 +27,8 @@ module DataStorageAcc(
     input ReadClock,
     input Reset,
     output reg DataReady = 1'b0,
-	 input [7:0] numEvents
+	 input [7:0] numEvents,
+	 input [6:0] dataLength
     );
 
 	reg byteNumber; //read high (1) or low byte (0) 
@@ -56,11 +57,12 @@ module DataStorageAcc(
 	always@(posedge ReadClock) begin
 		if(state == WAIT_TO_TRANSMIT) begin
 			byteNumber <= 0;
-//			readCounts <= 0;
 		end
 		else if (ReadEnable) begin
-			byteNumber <= ~byteNumber;
-//			readCounts <= readCounts + 1;
+			if(numEvents == 8'd1)	//in the case where we only collect 1 trigger of data, we only need 1 byte
+				byteNumber <= 1;
+			else
+				byteNumber <= ~byteNumber;
 		end
 	end
 	
@@ -214,7 +216,8 @@ DataCapture DI (
     .dataEmpty(dataEmptyDI), 
     .dataOut(dataOutDI),
 	 .dataValid(dataValidDI),
-	 .numEventsToAdd(numEvents)
+	 .numEventsToAdd(numEvents),
+	 .dataLength(dataLength)
     );
 	 
 DataCapture DID (
@@ -229,7 +232,8 @@ DataCapture DID (
     .dataEmpty(dataEmptyDID), 
     .dataOut(dataOutDID),
 	 .dataValid(dataValidDID),
-	 .numEventsToAdd(numEvents)
+	 .numEventsToAdd(numEvents),
+	 .dataLength(dataLength)
     );
 	 
 DataCapture DQ (
@@ -244,7 +248,8 @@ DataCapture DQ (
     .dataEmpty(dataEmptyDQ), 
     .dataOut(dataOutDQ),
 	 .dataValid(dataValidDQ),
-	 .numEventsToAdd(numEvents)
+	 .numEventsToAdd(numEvents),
+	 .dataLength(dataLength)
     );
 	 
 DataCapture DQD (
@@ -259,7 +264,8 @@ DataCapture DQD (
     .dataEmpty(dataEmptyDQD), 
     .dataOut(dataOutDQD),
 	 .dataValid(dataValidDQD),
-	 .numEventsToAdd(numEvents)
+	 .numEventsToAdd(numEvents),
+	 .dataLength(dataLength)
     );
 	 
 

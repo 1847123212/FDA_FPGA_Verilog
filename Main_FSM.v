@@ -53,7 +53,8 @@ module Main_FSM(
 	 output reg [7:0] selfTriggerValue = 8'd0,
 	 output enSelfTrigger,
 	 output disSelfTrigger,
-	 output reg [7:0] storageAmount = 8'd1, 
+	 output reg [7:0] storageAmount = 8'd1,
+	 output reg [6:0] dataLength = 7'd125,
 	 
 	 //uart output
 	 output reg [7:0] txData,
@@ -67,6 +68,7 @@ module Main_FSM(
 	reg [3:0] trigVoltageCounter = 0;
 	reg [3:0] selfTriggerCounter = 0;
 	reg [3:0] dataStorageCounter = 0;
+	reg [3:0] dataLengthCounter = 0;
 	
 	localparam IDLE = 0,
 					ECHO_ON = 1,
@@ -105,7 +107,11 @@ module Main_FSM(
 					DISABLE_SELF_TRIGGER = 34,
 					SET_DATA_STORAGE_VALUE= 35, 
 					SET_DS_0 = 36, //not currently used
-					SET_DS_1 = 37; //not currently used
+					SET_DS_1 = 37, //not currently used
+					SET_DATA_LENGTH = 38,
+					RETURN_DATA_LENGTH1 = 39,
+					RETURN_DATA_LENGTH2 = 40;
+					
 	 
 	//Logic for FSM outputs 
 	assign echoOn = (State == ECHO_ON);
@@ -171,6 +177,10 @@ module Main_FSM(
 			txData <= adcClockLock + 8'd48;
 			txDataWr <= 1'b1;
 		end
+		else if (State == RETURN_DATA_LENGTH2) begin
+			txData <= {0, dataLength};
+			txDataWr <= 1'b1;
+		end
 		//Deassert the Tx Write signal
 		else begin
 			txData <= 8'b0;
@@ -212,6 +222,19 @@ module Main_FSM(
 		end
 	 end
 	
+	//SET_DATA_LENGTH
+	 //Count the number of bits recieved for setting the data length value	 
+	 always@(posedge clk) begin
+		if(State == IDLE)
+			dataLengthCounter <= 4'd0;
+		else if(State == SET_DATA_LENGTH & NewCmd) begin
+			dataLengthCounter <= dataLengthCounter + 1;
+			if(Cmd == "0")
+				dataLength <= {dataLength[5:0], 1'b0};
+			else if(Cmd == "1")
+				dataLength <= {dataLength[5:0], 1'b1};
+		end
+	 end
 	
 	 always@(*) begin
 		NextState = State;
@@ -232,6 +255,8 @@ module Main_FSM(
 						"O": NextState = ADC_PWR_ON;
 						"o": NextState = ADC_PWR_OFF;
 						"L": NextState = RETURN_CLOCK_LOCK1;
+						"M": NextState = SET_DATA_LENGTH;
+						"m": NextState = RETURN_DATA_LENGTH1;
 						//"R": global reset of this FSM
 						"r": NextState = RESET_DCM1;
 						"S": NextState = ADC_SLEEP;
@@ -279,12 +304,18 @@ module Main_FSM(
 			SET_DATA_STORAGE_VALUE:begin
 				if(dataStorageCounter == 4'd8)
 					NextState = COMMAND_ACK;
-			end 
+			end
+			SET_DATA_LENGTH:begin
+				if(dataLengthCounter == 4'd7)
+					NextState = COMMAND_ACK;
+			end
 			ADC_WAKE: NextState = COMMAND_ACK;
 			ADC_RUN_CAL: NextState = COMMAND_ACK;
 			RECORD_DATA: NextState = IDLE;
 			RETURN_ADC_1: NextState = RETURN_ADC_2;
 			RETURN_ADC_2: NextState = IDLE;
+			RETURN_DATA_LENGTH1: NextState = RETURN_DATA_LENGTH2;
+			RETURN_DATA_LENGTH2: NextState = IDLE;
 			FIFO_STATE1: NextState = FIFO_STATE2;
 			FIFO_STATE2: NextState = IDLE;
 			ENABLE_AUTO_TRIG_RESET: NextState = COMMAND_ACK;

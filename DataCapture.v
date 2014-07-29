@@ -30,7 +30,8 @@ module DataCapture(
 	 output dataValid, 
     output dataEmpty,
     output [15:0] dataOut,
-	 input [7:0] numEventsToAdd
+	 input [7:0] numEventsToAdd,
+	 input [6:0] dataLength
     );
 	 
 	//parameter NUM_EVENTS = 8'd255;
@@ -51,9 +52,22 @@ module DataCapture(
 
 	//Registers
 	reg [7:0] numEventsCnt = 8'd0;
+	reg [6:0] dataLengthFast = 7'd125;	//max value
+	reg [6:0] dataLengthSlow = 7'd125;
 	
 	//Wires
 	wire rstFSM2 = 1'b0;
+	wire [6:0] dataLengthS;	 //synchronized to fast clock
+	
+	always@(posedge clk) 
+		if(state1 == WAIT_FOR_TRIG)
+			dataLengthFast <= dataLengthS;
+	
+	
+	always@(posedge clkSlow)
+		if(state2 == WAIT & numEventsCnt == 8'd0)
+			dataLengthSlow <= dataLength;
+	
 
 	//FSM to control when the fast fifo buffer is written to
 	(* FSM_ENCODING="ONE-HOT", SAFE_IMPLEMENTATION="NO" *) reg [3:0] state1 = RESET1;
@@ -91,12 +105,12 @@ module DataCapture(
       else
          (* FULL_CASE, PARALLEL_CASE *) case (state2)
 			RESET2:
-				if(~ffb_full_sync)
+				if(~ffb_almost_full_sync)
 					state2 <= WAIT;
 				else
 					state2 <= RESET2;
 			WAIT:	//wait until ffb is full
-				if(ffb_full_sync)
+				if(ffb_almost_full_sync)
 					state2<=READ;
 				else
 					state2<=WAIT;
@@ -164,6 +178,12 @@ module DataCapture(
 		.async_in(ffb_full), 
 		.sync_out(ffb_full_sync)
 	);
+	
+	async_input_sync ffb_almost_full_sync_module (
+		.clk(clkSlow), 
+		.async_in(ffb_almost_full), 
+		.sync_out(ffb_almost_full_sync)
+	);
 
 	wire [7:0] ffb_dout;
 	wire [15:0] sfa_din;
@@ -173,6 +193,9 @@ module DataCapture(
 	assign dataToAdd = (numEventsCnt == 8'd0) ? 16'd0 : sfa_dout;
 	assign sfa_din = {8'd0,ffb_dout} + dataToAdd;
 	
+	wire [6:0] prog_full_thresh = 7'd125;
+	
+	
 	FIFO_IND_CLK_8x128 fast_fifo_buffer (
 	  .rst(rst), // input rst
 	  .wr_clk(clk), // input wr_clk
@@ -180,12 +203,14 @@ module DataCapture(
 	  .din(inputData), // input [7 : 0] din
 	  .wr_en(ffb_wr), // input wr_en
 	  .rd_en(ffb_rd), // input rd_en
+	  .prog_full_thresh(dataLengthFast), // input [6 : 0] prog_full_thresh
 	  .dout(ffb_dout), // output [7 : 0] dout
 	  .full(ffb_full), // output full
-	  .almost_full(ffb_almost_full), // output almost_full
+//	  .almost_full(ffb_almost_full), // output almost_full
 	  .empty(ffb_empty), // output empty
 	  .almost_empty(ffb_almost_empty), // output almost_empty
-	  .valid(ffb_valid) // output valid
+	  .valid(ffb_valid), // output valid
+	  .prog_full(ffb_almost_full)
 	);
 
 	FIFO_1CLK_16x128 slow_fifo_accumulator (
@@ -194,12 +219,14 @@ module DataCapture(
 	  .din(sfa_din), // input [15 : 0] din
 	  .wr_en(sfa_wr), // input wr_en
 	  .rd_en(sfa_rd), // input rd_en
+	  .prog_full_thresh(dataLengthSlow), // input [6 : 0] prog_full_thresh
 	  .dout(sfa_dout), // output [15 : 0] dout
 	  .full(sfa_full), // output full
-	  .almost_full(sfa_almost_full), // output almost_full
+//	  .almost_full(sfa_almost_full), // output almost_full
 	  .empty(sfa_empty), // output empty
 	  .almost_empty(sfa_almost_empty), // output almost_empty
-	  .valid(sfa_valid) // output valid
+	  .valid(sfa_valid), // output valid
+	  .prog_full(sfa_almost_full) // output prog_full
 	);
 
 	assign fdt_din = sfa_dout;
@@ -212,12 +239,24 @@ module DataCapture(
 	  .din(fdt_din), // input [15 : 0] din
 	  .wr_en(fdt_wr), // input wr_en
 	  .rd_en(dataRead), // input rd_en
+	  .prog_full_thresh(dataLengthSlow), // input [6 : 0] prog_full_thresh
 	  .dout(dataOut), // output [15 : 0] dout
 	  .full(fdt_full), // output full
-	  .almost_full(fdt_almost_full), // output almost_full
+//	  .almost_full(fdt_almost_full), // output almost_full
 	  .empty(fdt_empty), // output empty
 	  .almost_empty(fdt_almost_empty), // output almost_empty
-	  .valid(fdt_valid) // output valid
+	  .valid(fdt_valid), // output valid
+	  .prog_full(fdt_almost_full) // output prog_full
 	);
 
+	genvar index;
+	generate for (index = 0; index < 7; index = index + 1) begin: async
+		async_input_sync dl_sync_module (
+			.clk(clk),
+			.async_in(dataLength[index]), 
+			.sync_out(dataLengthS[index])
+		);
+	end
+	endgenerate
+	
 endmodule
