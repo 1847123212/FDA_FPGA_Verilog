@@ -31,7 +31,7 @@ module DataCapture(
     output dataEmpty,
     output [15:0] dataOut,
 	 input [7:0] numEventsToAdd,
-	 input [6:0] dataLength
+	 input [9:0] dataLength
     );
 	 
 	//parameter NUM_EVENTS = 8'd255;
@@ -52,12 +52,12 @@ module DataCapture(
 
 	//Registers
 	reg [7:0] numEventsCnt = 8'd0;
-	reg [6:0] dataLengthFast = 7'd125;	//max value
-	reg [6:0] dataLengthSlow = 7'd125;
+	reg [9:0] dataLengthFast = 9'd125;	//max value
+	reg [9:0] dataLengthSlow = 9'd125;
 	
 	//Wires
 	wire rstFSM2 = 1'b0;
-	wire [6:0] dataLengthS;	 //synchronized to fast clock
+	wire [9:0] dataLengthS;	 //synchronized to fast clock
 	
 	always@(posedge clk) 
 		if(state1 == WAIT_FOR_TRIG)
@@ -250,7 +250,7 @@ module DataCapture(
 	);
 
 	genvar index;
-	generate for (index = 0; index < 7; index = index + 1) begin: async
+	generate for (index = 0; index < 10; index = index + 1) begin: async
 		async_input_sync dl_sync_module (
 			.clk(clk),
 			.async_in(dataLength[index]), 

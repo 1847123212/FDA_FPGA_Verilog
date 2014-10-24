@@ -54,7 +54,7 @@ module Main_FSM(
 	 output enSelfTrigger,
 	 output disSelfTrigger,
 	 output reg [7:0] storageAmount = 8'd1,
-	 output reg [6:0] dataLength = 7'd125,
+	 output reg [9:0] dataLength = 7'd125,	//max value is 1021
 	 
 	 //uart output
 	 output reg [7:0] txData,
@@ -68,7 +68,7 @@ module Main_FSM(
 	reg [3:0] trigVoltageCounter = 0;
 	reg [3:0] selfTriggerCounter = 0;
 	reg [3:0] dataStorageCounter = 0;
-	reg [3:0] dataLengthCounter = 0;
+	reg [3:0] dataLengthCounter = 0;	//10 bit value
 	
 	localparam IDLE = 0,
 					ECHO_ON = 1,
@@ -110,7 +110,9 @@ module Main_FSM(
 					SET_DS_1 = 37, //not currently used
 					SET_DATA_LENGTH = 38,
 					RETURN_DATA_LENGTH1 = 39,
-					RETURN_DATA_LENGTH2 = 40;
+					RETURN_DATA_LENGTH2 = 40,
+					RETURN_DATA_LENGTH3 = 41,
+					RETURN_DATA_LENGTH4 = 42;
 					
 	 
 	//Logic for FSM outputs 
@@ -178,7 +180,11 @@ module Main_FSM(
 			txDataWr <= 1'b1;
 		end
 		else if (State == RETURN_DATA_LENGTH2) begin
-			txData <= {0, dataLength};
+			txData <= dataLength[7:0];
+			txDataWr <= 1'b1;
+		end
+		else if (State == RETURN_DATA_LENGTH4) begin
+			txData <= {6'b000000, dataLength[9:8]};
 			txDataWr <= 1'b1;
 		end
 		//Deassert the Tx Write signal
@@ -230,9 +236,9 @@ module Main_FSM(
 		else if(State == SET_DATA_LENGTH & NewCmd) begin
 			dataLengthCounter <= dataLengthCounter + 1;
 			if(Cmd == "0")
-				dataLength <= {dataLength[5:0], 1'b0};
+				dataLength <= {dataLength[8:0], 1'b0};
 			else if(Cmd == "1")
-				dataLength <= {dataLength[5:0], 1'b1};
+				dataLength <= {dataLength[8:0], 1'b1};
 		end
 	 end
 	
@@ -306,7 +312,7 @@ module Main_FSM(
 					NextState = COMMAND_ACK;
 			end
 			SET_DATA_LENGTH:begin
-				if(dataLengthCounter == 4'd7)
+				if(dataLengthCounter == 4'd10)
 					NextState = COMMAND_ACK;
 			end
 			ADC_WAKE: NextState = COMMAND_ACK;
@@ -315,7 +321,9 @@ module Main_FSM(
 			RETURN_ADC_1: NextState = RETURN_ADC_2;
 			RETURN_ADC_2: NextState = IDLE;
 			RETURN_DATA_LENGTH1: NextState = RETURN_DATA_LENGTH2;
-			RETURN_DATA_LENGTH2: NextState = IDLE;
+			RETURN_DATA_LENGTH2: NextState = RETURN_DATA_LENGTH3;
+			RETURN_DATA_LENGTH3: NextState = RETURN_DATA_LENGTH4;
+			RETURN_DATA_LENGTH4: NextState = COMMAND_ACK;
 			FIFO_STATE1: NextState = FIFO_STATE2;
 			FIFO_STATE2: NextState = IDLE;
 			ENABLE_AUTO_TRIG_RESET: NextState = COMMAND_ACK;
@@ -325,7 +333,7 @@ module Main_FSM(
 			RETURN_CLOCK_LOCK1: NextState = RETURN_CLOCK_LOCK2;
 			RETURN_CLOCK_LOCK2: NextState = IDLE;
 			ERROR_IN1: NextState = ERROR_IN2;
-			ERROR_IN2: NextState = IDLE;						//Need two error states, because the FSM is transmitting hte received character during the first one
+			ERROR_IN2: NextState = IDLE;						//Need two error states, because the FSM is transmitting the received character during the first one
 			COMMAND_ACK: NextState = IDLE;
 		endcase 
 	 end

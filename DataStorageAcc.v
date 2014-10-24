@@ -28,7 +28,7 @@ module DataStorageAcc(
     input Reset,
     output reg DataReady = 1'b0,
 	 input [7:0] numEvents,
-	 input [6:0] dataLength
+	 input [9:0] dataLength
     );
 
 	reg byteNumber; //read high (1) or low byte (0) 

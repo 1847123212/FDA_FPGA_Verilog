@@ -72,7 +72,7 @@ module FDA_top(
 	wire [3:0] adcState;
 	wire [7:0] selfTriggerValue;
 	wire [7:0] eventsToAdd;
-	wire [6:0] dataLength;
+	wire [9:0] dataLength;
   
 //------------------------------------------------------------------------------
 // UART and device settings/state machines 
