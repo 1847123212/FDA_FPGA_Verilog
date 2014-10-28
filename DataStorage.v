@@ -18,7 +18,7 @@
 // Additional Comments: 
 //
 //////////////////////////////////////////////////////////////////////////////////
-module DataStorage(
+module DataStorageForAccumulation(
     input [31:0] DataIn,
     output [7:0] DataOut,
     input WriteStrobe,	// Assumed to be synchronous with ReadClock
@@ -45,7 +45,7 @@ wire ConverterEmpty_wrClk, FifosEmpty_wrClk, FastTrigger_rdClk;
 wire WriteEnable, WriteStrobe_wrClk;
 
 
-reg FifosFull = 0;//(fullDI | fullDID | fullDQ | fullDQD);	
+reg FifosFull = 0;//(fullDI | fullDID | fullDQ | fullDQD);
 
 always@(posedge WriteClock) begin
 	FifosFull <= (progFullDI | progFullDID | progFullDQ | progFullDQD);
@@ -59,7 +59,7 @@ parameter STORING_DATA = 4'b0100;
 parameter SENDING_DATA = 4'b1000;
 
 (* FSM_ENCODING="ONE-HOT", SAFE_IMPLEMENTATION="NO" *) reg [3:0] stateWr = RESET;
-
+//State machine for initially capturing the high speed data
 always@(posedge WriteClock)
       if (Reset) begin
          stateWr <= RESET;
