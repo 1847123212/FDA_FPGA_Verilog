@@ -98,7 +98,7 @@ module FDA_top(
 		 .generalData(txData), 
 		 .generalDataWrite(txDataWr), 
 		 .adcDataStreamingMode(DataReadyToSend),  //input equal to adc fifo not empty
-		 .adcDataValid(DataReadyToSend), 			//input to UART Start signal
+		 .adcDataValid(DataValid), 					//input to UART Start signal
 		 .adcDataStrobe(adcDataRead),					//output to adc FIFO 
 		 .SDO(USB_RS232_TXD)
 		 );
@@ -285,12 +285,24 @@ ADCDataInput ADC_Data_Capture (
     );
 
 //------------------------------------------------------------------------------
-// Data FIFOs with accumulation of triggered data
+// Data FIFOs with accumulation of triggered data peaks only
 //------------------------------------------------------------------------------
+DataPeakAccumulate DataFIFOS (
+    .DataIn(ADCRegDataOut), 
+    .FastTrigger(triggered), 
+    .TxEnable(adcDataRead), 
+    .DataClk(AdcClk), 
+    .SysClk(clk), 
+    .Reset(1'b0), 
+    .DataReady(DataReadyToSend), 
+    .DataValid(DataValid), 
+    .DataOut(StoredDataOut)
+    );
 
 //// Data is recorded either with the serial command "X", or a trigger event
 //// and only when there is a lock on the ADC clock.
 //// The triggered signal comes from the external trigger
+/**
 DataStorageAcc DataFIFOS (
     .DataIn(ADCRegDataOut), 
     .DataOut(StoredDataOut), 
@@ -303,6 +315,7 @@ DataStorageAcc DataFIFOS (
 	 .numEvents(eventsToAdd[7:0]),
 	 .dataLength(dataLength)
     );
+**/
 
 //------------------------------------------------------------------------------
 // GPIO - The LEDs are inverted - so 0 is on, 1 is off
