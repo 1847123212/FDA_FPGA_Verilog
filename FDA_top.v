@@ -81,7 +81,9 @@ module FDA_top(
 
 	wire [7:0] txData;
 	wire [7:0] Cmd;
-	wire adcDataRead, DataReadyToSend;
+	wire adcDataRead, DataReadyToSend, DataValid;
+	wire DataReadEnable;
+	assign DataReadEnable = adcDataRead & (~DataValid);
 	
 	RxDWrapper RxD (
 		 .Clock(clk), 
@@ -290,7 +292,7 @@ ADCDataInput ADC_Data_Capture (
 DataPeakAccumulate DataFIFOS (
     .DataIn(ADCRegDataOut), 
     .FastTrigger(triggered), 
-    .TxEnable(adcDataRead), 
+    .TxEnable(DataReadEnable), 
     .DataClk(AdcClk), 
     .SysClk(clk), 
     .Reset(1'b0), 

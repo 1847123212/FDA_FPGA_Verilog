@@ -29,7 +29,7 @@ Target Device                       : 6slx9tqg144-3
 *                        Optimizations                                  *
 =========================================================================
 ---- Statistics
-   Number of LUTs added by Replication                       | 1               
+   Number of registers added by Replication                  | 1               
 
    Overall change in number of design objects                | +1               
 
@@ -38,7 +38,7 @@ Target Device                       : 6slx9tqg144-3
 
 New or modified components                             | Optimization             | Objective           
 -------------------------------------------------------|--------------------------|----------------------
-DataFIFOS/stage_2_buffer/fifos_stage_1/fifoDID/U0/xst_fifo_generator/gconvfifo.rf/grf.rf/gntv_or_sync_fifo.gl0.wr/gwas.wsts/Mmux_comp1_GND_175_o_MUX_11_o18_REPLICA_0| Replication              | Fanout Optimization
+DataFIFOS/stage_2_buffer/fifos_stage_1/s1State_FSM_FFd2_REPLICA_0| Replication              | Fanout Optimization
 
    Flops added for Enable Generation                       
 -------------------------
