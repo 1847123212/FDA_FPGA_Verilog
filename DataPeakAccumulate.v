@@ -151,7 +151,7 @@ module DataPeakAccumulate(
 	  
 	 Fifo16x512 accumulator_fifo (
 	   .clk(SysClk), // input clk
-	   .rst(Reset), // input rst
+	   .rst(state == WRITE_STOP), // input rst
 	   .din(accDataIn), // input [15 : 0] din
 	   .wr_en(accWrEn), // input wr_en
 	   .rd_en(accRdEn), // input rd_en
